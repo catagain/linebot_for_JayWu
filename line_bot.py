@@ -115,13 +115,56 @@ def handle_message(event):
                 update_user_field(user_id, 'id_number', user['temp_value'])
                 clear_temp_value(user_id)
                 update_user_step(user_id, 'ask_name')
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的名子"))
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的名字"))
+                return
+
+            elif step == 'ask_name':
+                update_user_field(user_id, 'name', user['temp_value'])
+                clear_temp_value(user_id)
+                update_user_step(user_id, 'ask_birthday')
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的生日（格式 yyyy-mm-dd）："))
+                return
+
+            elif step == 'ask_birthday':
+                update_user_field(user_id, 'birthday', user['temp_value'])
+                clear_temp_value(user_id)
+                update_user_step(user_id, 'ask_phone')
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的電話號碼："))
+                return
+
+            elif step == 'ask_phone':
+                update_user_field(user_id, 'phone', user['temp_value'])
+                clear_temp_value(user_id)
+                update_user_step(user_id, 'ask_email')
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的 Email："))
+                return
+
+            elif step == 'ask_email':
+                update_user_field(user_id, 'email', user['temp_value'])
+                clear_temp_value(user_id)
+                update_user_step(user_id, 'ask_address')
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的戶名或門牌："))
+                return
+
+            elif step == 'ask_address':
+                update_user_field(user_id, 'address', user['temp_value'])
+                clear_temp_value(user_id)
+                update_user_step(user_id, None)
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 所有資料已填寫完畢，謝謝你的配合！"))
                 return
 
         elif msg == '重填':
-            if step == 'ask_id':
+            if step in ['ask_id', 'ask_name', 'ask_birthday', 'ask_phone', 'ask_email', 'ask_address']:
                 clear_temp_value(user_id)
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請重新輸入你的身分證字號："))
+                question = {
+                    'ask_id': "請重新輸入你的身分證字號：",
+                    'ask_name': "請重新輸入你的名字：",
+                    'ask_birthday': "請重新輸入你的生日（格式 yyyy-mm-dd）：",
+                    'ask_phone': "請重新輸入你的電話號碼：",
+                    'ask_email': "請重新輸入你的 Email：",
+                    'ask_address': "請重新輸入你的戶名或門牌："
+                }
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=question[step]))
                 return
 
         elif step == 'ask_id':
@@ -141,34 +184,85 @@ def handle_message(event):
             return
 
         elif step == 'ask_name':
-            update_user_field(user_id, 'name', msg)
-            update_user_step(user_id, 'ask_birthday')
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的生日\n（格式 yyyy-mm-dd）："))
+            update_temp_value(user_id, msg)
+            reply_text = f"您輸入的名字是：{msg}，正確嗎？"
+            confirm_msg = TemplateSendMessage(
+                alt_text='請確認名字',
+                template=ConfirmTemplate(
+                    text=reply_text,
+                    actions=[
+                        MessageAction(label='✅ 正確', text='確認'),
+                        MessageAction(label='🔁 重填', text='重填')
+                    ]
+                )
+            )
+            line_bot_api.reply_message(event.reply_token, confirm_msg)
             return
 
         elif step == 'ask_birthday':
-            update_user_field(user_id, 'birthday', msg)
-            update_user_step(user_id, 'ask_phone')
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的電話號碼："))
+            update_temp_value(user_id, msg)
+            reply_text = f"您輸入的生日是：{msg}，正確嗎？"
+            confirm_msg = TemplateSendMessage(
+                alt_text='請確認生日',
+                template=ConfirmTemplate(
+                    text=reply_text,
+                    actions=[
+                        MessageAction(label='✅ 正確', text='確認'),
+                        MessageAction(label='🔁 重填', text='重填')
+                    ]
+                )
+            )
+            line_bot_api.reply_message(event.reply_token, confirm_msg)
             return
 
         elif step == 'ask_phone':
-            update_user_field(user_id, 'phone', msg)
-            update_user_step(user_id, 'ask_email')
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的 Email："))
+            update_temp_value(user_id, msg)
+            reply_text = f"您輸入的電話號碼是：{msg}，正確嗎？"
+            confirm_msg = TemplateSendMessage(
+                alt_text='請確認電話號碼',
+                template=ConfirmTemplate(
+                    text=reply_text,
+                    actions=[
+                        MessageAction(label='✅ 正確', text='確認'),
+                        MessageAction(label='🔁 重填', text='重填')
+                    ]
+                )
+            )
+            line_bot_api.reply_message(event.reply_token, confirm_msg)
             return
 
         elif step == 'ask_email':
-            update_user_field(user_id, 'email', msg)
-            update_user_step(user_id, 'ask_address')
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的戶名或門牌："))
+            update_temp_value(user_id, msg)
+            reply_text = f"您輸入的 Email 是：{msg}，正確嗎？"
+            confirm_msg = TemplateSendMessage(
+                alt_text='請確認 Email',
+                template=ConfirmTemplate(
+                    text=reply_text,
+                    actions=[
+                        MessageAction(label='✅ 正確', text='確認'),
+                        MessageAction(label='🔁 重填', text='重填')
+                    ]
+                )
+            )
+            line_bot_api.reply_message(event.reply_token, confirm_msg)
             return
 
         elif step == 'ask_address':
-            update_user_field(user_id, 'address', msg)
-            update_user_step(user_id, None)
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 所有資料已填寫完畢，謝謝你的配合！"))
+            update_temp_value(user_id, msg)
+            reply_text = f"您輸入的戶名或門牌是：{msg}，正確嗎？"
+            confirm_msg = TemplateSendMessage(
+                alt_text='請確認戶名或門牌',
+                template=ConfirmTemplate(
+                    text=reply_text,
+                    actions=[
+                        MessageAction(label='✅ 正確', text='確認'),
+                        MessageAction(label='🔁 重填', text='重填')
+                    ]
+                )
+            )
+            line_bot_api.reply_message(event.reply_token, confirm_msg)
             return
+
 
     # 雖然不期望他們選擇訪客，但還是做一下
     elif user['identity'] == '我是訪客':
