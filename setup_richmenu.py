@@ -20,7 +20,7 @@ rich_menu_to_create = RichMenu(
     areas=[
         RichMenuArea(
             bounds=RichMenuBounds(x=0, y=0, width=1250, height=843),
-            action=MessageAction(label="重填個人訊息", text="重填個人訊息")
+            action=MessageAction(label="修改個人資訊", text="修改個人資訊")
         ),
         RichMenuArea(
             bounds=RichMenuBounds(x=1250, y=0, width=1250, height=843),

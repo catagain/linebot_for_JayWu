@@ -87,4 +87,3 @@ def update_temp_value(line_user_id, value):
 
 def clear_temp_value(line_user_id):
     update_temp_value(line_user_id, None)
-

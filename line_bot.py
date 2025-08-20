@@ -2,6 +2,7 @@ from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import *
+import json
 
 from dotenv import load_dotenv
 import os
@@ -62,7 +63,7 @@ def handle_message(event):
             if msg == '我是住戶':
 
                 # step 紀錄目前詢問的個人資訊；mode 紀錄是否是第一次填寫，若否代表是在更改個人訊息，不使用預設的填寫流程。
-                update_user_step(user_id, 'ask_id')
+                update_user_step(user_id, 'ask_id_number')
                 update_user_mode(user_id, 'initial_fill')
                 line_bot_api.reply_message(
                     event.reply_token,
@@ -85,25 +86,51 @@ def handle_message(event):
         mode = user['mode']
 
         if msg == '我是住戶':
-            update_user_step(user_id, 'ask_id')
+            update_user_step(user_id, 'ask_id_number')
             update_user_mode(user_id, 'initial_fill')
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text=f"你選擇的身分是：{msg}\n請輸入您的身分字號：")
             )
 
+        if msg == '我的個人資料':
+            # 取得使用者所有資訊
+            user_info = get_user(user_id)
+            if user_info and user_info['identity'] == '我是住戶':
+                # 格式化並回覆使用者資訊
+                profile_text = (
+                    f"✅ 你的個人資料：\n"
+                    f"身分：{user_info.get('identity', '未設定')}\n"
+                    f"身分證字號：{user_info.get('id_number', '未設定')}\n"
+                    f"名字：{user_info.get('name', '未設定')}\n"
+                    f"生日：{user_info.get('birthday', '未設定')}\n"
+                    f"電話：{user_info.get('phone', '未設定')}\n"
+                    f"Email：{user_info.get('email', '未設定')}\n"
+                    f"戶名或門牌：{user_info.get('address', '未設定')}"
+                )
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=profile_text)
+                )
+            else:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="請先完成住戶身份認證才能查看個人資料喔！")
+                )
+            return # 處理完畢後直接結束
+
         # TBD 讓使用者修改個人資訊
-        elif msg == "修改個人資料":
+        elif msg == "修改個人資訊":
 
             # 將 mode 更改，讓修改資訊過程不是預設的線性流程回答，而只更改單一欄位。
             update_user_mode(user_id, 'modify_data')
             
             message = TemplateSendMessage(
-                alt_text="修改個人資料",
+                alt_text="修改個人資訊",
                 template=CarouselTemplate(
                     columns=[
                         CarouselColumn(
-                            title="基本資料",
+                            title="基本資訊",
                             text="請選擇要修改的欄位：",
                             actions=[
                                 MessageAction(label="身分證字號", text="修改_身分證字號"),
@@ -112,7 +139,7 @@ def handle_message(event):
                             ]
                         ),
                         CarouselColumn(
-                            title="聯絡資料",
+                            title="聯絡資訊",
                             text="請選擇要修改的欄位：",
                             actions=[
                                 MessageAction(label="電話", text="修改_電話"),
@@ -127,14 +154,47 @@ def handle_message(event):
             return
         
         elif msg.startswith("修改_"):
+
+            # 戶名門牌用選擇的，故另外處理
+            if msg == '修改_戶名或門牌':
+                update_user_step(user_id, 'ask_address_1')
+
+                # 讀取本地的 addresses.json 檔案
+                with open('addresses.json', 'r', encoding='utf-8') as f:
+                    addresses = json.load(f)
+
+                # 將地址轉換為 ButtonTemplate 的 actions
+                actions = [
+                    MessageAction(
+                        label=addr,
+                        text=addr
+                    ) for addr in addresses
+                ]
+
+                # 建立選單訊息
+                address_selection_msg = TemplateSendMessage(
+                    alt_text='請選擇你的戶名或門牌',
+                    template=ButtonsTemplate(
+                        title='請選擇你的戶名或門牌',
+                        text='請從以下選項中選擇你的地址：',
+                        actions=actions
+                    )
+                )
+
+                # 回覆使用者
+                line_bot_api.reply_message(event.reply_token, address_selection_msg)
+                
+                # 停止當前處理，等待使用者選擇
+                return
+
             update_user_mode(user_id, 'modify_data')
             field_map = {
-                "修改_身分證字號": ("ask_id", "請輸入新的身分證字號："),
+                "修改_身分證字號": ("ask_id_number", "請輸入新的身分證字號："),
                 "修改_名字": ("ask_name", "請輸入新的名字："),
                 "修改_生日": ("ask_birthday", "請輸入新的生日（yyyy-mm-dd）："),
                 "修改_電話": ("ask_phone", "請輸入新的電話號碼："),
                 "修改_Email": ("ask_email", "請輸入新的 Email："),
-                "修改_戶名或門牌": ("ask_address", "請輸入新的戶名或門牌："),
+                "修改_戶名或門牌": ("ask_address_1", "請輸入新的戶名或門牌："),
             }
             step, question = field_map[msg]
             update_user_step(user_id, step)
@@ -160,12 +220,13 @@ def handle_message(event):
         elif msg == '確認':
 
             if mode == 'modify_data':
+                update_user_field(user_id, step[4:], user['temp_value'])
                 update_user_step(user_id, None)
                 clear_user_mode(user_id)
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 資料修改完畢，謝謝你的配合！"))
                 return
 
-            if step == 'ask_id':
+            if step == 'ask_id_number':
                 update_user_field(user_id, 'id_number', user['temp_value'])
                 clear_temp_value(user_id)
                 update_user_step(user_id, 'ask_name')
@@ -196,11 +257,40 @@ def handle_message(event):
             elif step == 'ask_email':
                 update_user_field(user_id, 'email', user['temp_value'])
                 clear_temp_value(user_id)
-                update_user_step(user_id, 'ask_address')
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的戶名或門牌："))
+                update_user_step(user_id, 'ask_address_1')
+
+                # line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的戶名或門牌："))
+                
+                # 讀取本地的 addresses.json 檔案
+                with open('addresses.json', 'r', encoding='utf-8') as f:
+                    addresses = json.load(f)
+
+                # 將地址轉換為 ButtonTemplate 的 actions
+                actions = [
+                    MessageAction(
+                        label=addr,
+                        text=addr
+                    ) for addr in addresses
+                ]
+
+                # 建立選單訊息
+                address_selection_msg = TemplateSendMessage(
+                    alt_text='請選擇你的戶名或門牌',
+                    template=ButtonsTemplate(
+                        title='請選擇你的戶名或門牌',
+                        text='請從以下選項中選擇你的地址：',
+                        actions=actions
+                    )
+                )
+
+                # 回覆使用者
+                line_bot_api.reply_message(event.reply_token, address_selection_msg)
+                
+                # 停止當前處理，等待使用者選擇
                 return
 
-            elif step == 'ask_address':
+            elif step == 'ask_address_2':
+                user = get_user(user_id)
                 update_user_field(user_id, 'address', user['temp_value'])
                 clear_temp_value(user_id)
                 update_user_step(user_id, None)
@@ -208,20 +298,20 @@ def handle_message(event):
                 return
 
         elif msg == '重填':
-            if step in ['ask_id', 'ask_name', 'ask_birthday', 'ask_phone', 'ask_email', 'ask_address']:
+            if step in ['ask_id_number', 'ask_name', 'ask_birthday', 'ask_phone', 'ask_email', 'ask_address_1']:
                 clear_temp_value(user_id)
                 question = {
-                    'ask_id': "請重新輸入你的身分證字號：",
+                    'ask_id_number': "請重新輸入你的身分證字號：",
                     'ask_name': "請重新輸入你的名字：",
                     'ask_birthday': "請重新輸入你的生日（格式 yyyy-mm-dd）：",
                     'ask_phone': "請重新輸入你的電話號碼：",
                     'ask_email': "請重新輸入你的 Email：",
-                    'ask_address': "請重新輸入你的戶名或門牌："
+                    'ask_address_1': "請重新輸入你的戶名或門牌："
                 }
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=question[step]))
                 return
 
-        elif step == 'ask_id':
+        elif step == 'ask_id_number':
             update_temp_value(user_id, msg)
             reply_text = f"您輸入的身分證字號是：{msg}，正確嗎？"
             confirm_msg = TemplateSendMessage(
@@ -301,9 +391,18 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, confirm_msg)
             return
 
-        elif step == 'ask_address':
+        elif step == 'ask_address_1':
             update_temp_value(user_id, msg)
-            reply_text = f"您輸入的戶名或門牌是：{msg}，正確嗎？"
+            reply_text = f"您選擇的戶名是：{msg}，請輸入門牌"
+            update_user_step(user_id, 'ask_address_2')
+            line_bot_api.reply_message(event.reply_token,  TextSendMessage(text=reply_text))
+
+
+        elif step == 'ask_address_2':
+            print('aaaa')
+            user = get_user(user_id)
+            update_temp_value(user_id, f"{user['temp_value']}_{msg}")
+            reply_text = f"您輸入的戶名或門牌是：{user['temp_value']}_{msg}，正確嗎？"
             confirm_msg = TemplateSendMessage(
                 alt_text='請確認戶名或門牌',
                 template=ConfirmTemplate(
