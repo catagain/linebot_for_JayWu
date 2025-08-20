@@ -66,6 +66,17 @@ def update_user_field(line_user_id, field_name, value):
             cursor.execute(sql, (value, line_user_id))
             conn.commit()
 
+def update_user_mode(line_user_id, mode):
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cursor:
+            sql = "UPDATE users SET mode = %s WHERE line_user_id = %s"
+            cursor.execute(sql, (mode, line_user_id))
+            conn.commit()
+
+def clear_user_mode(line_user_id):
+    update_user_mode(line_user_id, None)
+
 def update_temp_value(line_user_id, value):
     conn = get_connection()
     with conn:

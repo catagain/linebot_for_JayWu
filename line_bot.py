@@ -60,7 +60,10 @@ def handle_message(event):
             update_identity(user_id, msg)
 
             if msg == '我是住戶':
+
+                # step 紀錄目前詢問的個人資訊；mode 紀錄是否是第一次填寫，若否代表是在更改個人訊息，不使用預設的填寫流程。
                 update_user_step(user_id, 'ask_id')
+                update_user_mode(user_id, 'initial_fill')
                 line_bot_api.reply_message(
                     event.reply_token,
                     TextSendMessage(text=f"你選擇的身分是：{msg}\n請輸入您的身分字號：")
@@ -79,22 +82,22 @@ def handle_message(event):
     # 如果是住戶，進行多輪提問，取得對方資訊
     if user['identity'] == '我是住戶':
         step = user['step']
+        mode = user['mode']
 
         if msg == '我是住戶':
             update_user_step(user_id, 'ask_id')
+            update_user_mode(user_id, 'initial_fill')
             line_bot_api.reply_message(
                 event.reply_token,
                 TextSendMessage(text=f"你選擇的身分是：{msg}\n請輸入您的身分字號：")
             )
-        
-        # 讓住戶重新填寫個人訊息
-        # TBD - 需不需要做防呆?
-        elif msg == '重填個人訊息':
-            imagemap_msg = create_identity_imagemap()
-            line_bot_api.reply_message(event.reply_token, imagemap_msg)
-            return
 
+        # TBD 讓使用者修改個人資訊
         elif msg == "修改個人資料":
+
+            # 將 mode 更改，讓修改資訊過程不是預設的線性流程回答，而只更改單一欄位。
+            update_user_mode(user_id, 'modify_data')
+            
             message = TemplateSendMessage(
                 alt_text="修改個人資料",
                 template=CarouselTemplate(
@@ -124,6 +127,7 @@ def handle_message(event):
             return
         
         elif msg.startswith("修改_"):
+            update_user_mode(user_id, 'modify_data')
             field_map = {
                 "修改_身分證字號": ("ask_id", "請輸入新的身分證字號："),
                 "修改_名字": ("ask_name", "請輸入新的名字："),
@@ -154,6 +158,13 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, message)
         
         elif msg == '確認':
+
+            if mode == 'modify_data':
+                update_user_step(user_id, None)
+                clear_user_mode(user_id)
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 資料修改完畢，謝謝你的配合！"))
+                return
+
             if step == 'ask_id':
                 update_user_field(user_id, 'id_number', user['temp_value'])
                 clear_temp_value(user_id)
