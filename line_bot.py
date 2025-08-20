@@ -94,6 +94,49 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, imagemap_msg)
             return
 
+        elif msg == "修改個人資料":
+            message = TemplateSendMessage(
+                alt_text="修改個人資料",
+                template=CarouselTemplate(
+                    columns=[
+                        CarouselColumn(
+                            title="基本資料",
+                            text="請選擇要修改的欄位：",
+                            actions=[
+                                MessageAction(label="身分證字號", text="修改_身分證字號"),
+                                MessageAction(label="名字", text="修改_名字"),
+                                MessageAction(label="生日", text="修改_生日"),
+                            ]
+                        ),
+                        CarouselColumn(
+                            title="聯絡資料",
+                            text="請選擇要修改的欄位：",
+                            actions=[
+                                MessageAction(label="電話", text="修改_電話"),
+                                MessageAction(label="Email", text="修改_Email"),
+                                MessageAction(label="戶名或門牌", text="修改_戶名或門牌"),
+                            ]
+                        )
+                    ]
+                )
+            )
+            line_bot_api.reply_message(event.reply_token, message)
+            return
+        
+        elif msg.startswith("修改_"):
+            field_map = {
+                "修改_身分證字號": ("ask_id", "請輸入新的身分證字號："),
+                "修改_名字": ("ask_name", "請輸入新的名字："),
+                "修改_生日": ("ask_birthday", "請輸入新的生日（yyyy-mm-dd）："),
+                "修改_電話": ("ask_phone", "請輸入新的電話號碼："),
+                "修改_Email": ("ask_email", "請輸入新的 Email："),
+                "修改_戶名或門牌": ("ask_address", "請輸入新的戶名或門牌："),
+            }
+            step, question = field_map[msg]
+            update_user_step(user_id, step)
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=question))
+            return
+
         elif msg == '我要報修':
             base_url = "https://docs.google.com/forms/d/e/1FAIpQLSe_eMdAWSUVn7Ze6ZgF5F5aL3Dt2c4pEQGzZBzqFmuOp40EvQ/viewform"
             entry_field_name = 'entry.1742058975'
