@@ -48,7 +48,14 @@ def get_user(line_user_id):
         with conn.cursor() as cursor:
             sql = "SELECT * FROM users WHERE line_user_id = %s"
             cursor.execute(sql, (line_user_id,))
-            return cursor.fetchone()
+            user = cursor.fetchone()
+            if user:
+                # 將地址字串分割成清單
+                if user['address']:
+                    user['addresses'] = user['address'].split('/')
+                else:
+                    user['addresses'] = []
+            return user
 
 def update_user_step(line_user_id, step):
     conn = get_connection()
@@ -87,3 +94,24 @@ def update_temp_value(line_user_id, value):
 
 def clear_temp_value(line_user_id):
     update_temp_value(line_user_id, None)
+
+def append_address(line_user_id, new_address):
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cursor:
+            # 取得現有的地址字串
+            sql = "SELECT address FROM users WHERE line_user_id = %s"
+            cursor.execute(sql, (line_user_id,))
+            result = cursor.fetchone()
+            current_address = result['address'] if result and result['address'] else ""
+
+            # 合併地址
+            if current_address:
+                updated_address = f"{current_address}/{new_address}"
+            else:
+                updated_address = new_address
+            
+            # 更新資料庫
+            sql = "UPDATE users SET address = %s WHERE line_user_id = %s"
+            cursor.execute(sql, (updated_address, line_user_id))
+            conn.commit()

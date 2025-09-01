@@ -98,6 +98,7 @@ def handle_message(event):
             user_info = get_user(user_id)
             if user_info and user_info['identity'] == '我是住戶':
                 # 格式化並回覆使用者資訊
+                addresses_text = '\n'.join(user_info.get('addresses', [])) if user_info.get('addresses') else "未設定"
                 profile_text = (
                     f"✅ 你的個人資料：\n"
                     f"身分：{user_info.get('identity', '未設定')}\n"
@@ -106,7 +107,7 @@ def handle_message(event):
                     f"生日：{user_info.get('birthday', '未設定')}\n"
                     f"電話：{user_info.get('phone', '未設定')}\n"
                     f"Email：{user_info.get('email', '未設定')}\n"
-                    f"戶名或門牌：{user_info.get('address', '未設定')}"
+                    f"戶名或門牌：\n{addresses_text}"
                 )
                 line_bot_api.reply_message(
                     event.reply_token,
@@ -289,9 +290,13 @@ def handle_message(event):
                 # 停止當前處理，等待使用者選擇
                 return
 
-            elif step == 'ask_address_2':
+            elif step == 'ask_address':
                 user = get_user(user_id)
-                update_user_field(user_id, 'address', user['temp_value'])
+
+                # 不再讓使用者可以更改地址，而是只能新增
+                # update_user_field(user_id, 'address', user['temp_value'])
+                append_address(user_id, user['temp_value'])
+
                 clear_temp_value(user_id)
                 update_user_step(user_id, None)
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 所有資料已填寫完畢，謝謝你的配合！"))
@@ -394,11 +399,11 @@ def handle_message(event):
         elif step == 'ask_address_1':
             update_temp_value(user_id, msg)
             reply_text = f"您選擇的戶名是：{msg}，請輸入門牌"
-            update_user_step(user_id, 'ask_address_2')
+            update_user_step(user_id, 'ask_address')
             line_bot_api.reply_message(event.reply_token,  TextSendMessage(text=reply_text))
 
 
-        elif step == 'ask_address_2':
+        elif step == 'ask_address':
             print('aaaa')
             user = get_user(user_id)
             update_temp_value(user_id, f"{user['temp_value']}_{msg}")
