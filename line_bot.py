@@ -16,6 +16,13 @@ app = Flask(__name__)
 line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
+# TBD 
+# address 選擇清單的函式化
+# 預售屋的房子特別標示
+# 檢查保固
+
+
+
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
@@ -120,7 +127,7 @@ def handle_message(event):
                 )
             return # 處理完畢後直接結束
 
-        # TBD 讓使用者修改個人資訊
+        # 讓使用者修改個人資訊
         elif msg == "修改個人資訊":
 
             # 將 mode 更改，讓修改資訊過程不是預設的線性流程回答，而只更改單一欄位。
@@ -158,6 +165,7 @@ def handle_message(event):
 
             # 戶名門牌用選擇的，故另外處理
             if msg == '修改_戶名或門牌':
+                update_user_mode(user_id, 'modify_data')
                 update_user_step(user_id, 'ask_address_1')
 
                 # 讀取本地的 addresses.json 檔案
@@ -220,12 +228,43 @@ def handle_message(event):
         
         elif msg == '確認':
 
+            # 如果使用者是修改資料，mode 會是 modify_data，則不繼續進行提問
             if mode == 'modify_data':
-                update_user_field(user_id, step[4:], user['temp_value'])
-                update_user_step(user_id, None)
-                clear_user_mode(user_id)
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 資料修改完畢，謝謝你的配合！"))
-                return
+                # 將地址額外詢問
+                if step == 'ask_address':
+                    full_address = user['temp_value']
+                    try:
+                        with open('available_addresses.json', 'r+', encoding='utf-8') as f:
+                            available_addresses = json.load(f)
+
+                            if full_address in available_addresses:
+                                # **只有在確認時才從檔案中刪除地址**
+                                available_addresses.remove(full_address)
+                                f.seek(0)
+                                json.dump(available_addresses, f, ensure_ascii=False, indent=2)
+                                f.truncate()
+
+                                # 將地址寫入使用者資料
+                                append_address(user_id, full_address)
+                                clear_temp_value(user_id)
+                                update_user_step(user_id, None)
+                                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 新地址已成功新增！"))
+                            else:
+                                # 如果地址已經被其他使用者新增了，給出提示
+                                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="此地址已被其他使用者新增，請聯繫管理員。"))
+                                clear_temp_value(user_id)
+                                update_user_step(user_id, None)
+                    except FileNotFoundError:
+                        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="地址清單檔案不存在，請聯繫管理員。"))
+                        clear_temp_value(user_id)
+                        update_user_step(user_id, None)
+                    return
+                else:
+                    update_user_field(user_id, step[4:], user['temp_value'])
+                    update_user_step(user_id, None)
+                    clear_user_mode(user_id)
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 資料修改完畢，謝謝你的配合！"))
+                    return
 
             if step == 'ask_id_number':
                 update_user_field(user_id, 'id_number', user['temp_value'])
@@ -259,9 +298,7 @@ def handle_message(event):
                 update_user_field(user_id, 'email', user['temp_value'])
                 clear_temp_value(user_id)
                 update_user_step(user_id, 'ask_address_1')
-
-                # line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入你的戶名或門牌："))
-                
+               
                 # 讀取本地的 addresses.json 檔案
                 with open('addresses.json', 'r', encoding='utf-8') as f:
                     addresses = json.load(f)
@@ -292,7 +329,7 @@ def handle_message(event):
 
                 # 不再讓使用者可以更改地址，而是只能新增
                 # update_user_field(user_id, 'address', user['temp_value'])
-                append_address(user_id, user['temp_value'])
+                # append_address(user_id, user['temp_value'])
 
                 full_address = user['temp_value']
 
@@ -311,12 +348,16 @@ def handle_message(event):
                             append_address(user_id, full_address)
                             clear_temp_value(user_id)
                             update_user_step(user_id, None)
-                            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 新地址已成功新增！"))
+                            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 新地址已成功新增！\n完成所有填答啦！"))
                         else:
                             # 如果地址已經被其他使用者新增了，給出提示
                             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="此地址已被其他使用者新增，請聯繫管理員。"))
+                            clear_temp_value(user_id)
+                            update_user_step(user_id, None)
                 except FileNotFoundError:
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text="地址清單檔案不存在，請聯繫管理員。"))
+                    clear_temp_value(user_id)
+                    update_user_step(user_id, None)
                 return
 
         elif msg == '重填':
