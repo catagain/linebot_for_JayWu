@@ -284,10 +284,7 @@ def handle_message(event):
                     )
                 )
 
-                # 回覆使用者
                 line_bot_api.reply_message(event.reply_token, address_selection_msg)
-                
-                # 停止當前處理，等待使用者選擇
                 return
 
             elif step == 'ask_address':
@@ -297,13 +294,33 @@ def handle_message(event):
                 # update_user_field(user_id, 'address', user['temp_value'])
                 append_address(user_id, user['temp_value'])
 
-                clear_temp_value(user_id)
-                update_user_step(user_id, None)
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 所有資料已填寫完畢，謝謝你的配合！"))
+                full_address = user['temp_value']
+
+                try:
+                    with open('available_addresses.json', 'r+', encoding='utf-8') as f:
+                        available_addresses = json.load(f)
+
+                        if full_address in available_addresses:
+                            # **只有在確認時才從檔案中刪除地址**
+                            available_addresses.remove(full_address)
+                            f.seek(0)
+                            json.dump(available_addresses, f, ensure_ascii=False, indent=2)
+                            f.truncate()
+
+                            # 將地址寫入使用者資料
+                            append_address(user_id, full_address)
+                            clear_temp_value(user_id)
+                            update_user_step(user_id, None)
+                            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 新地址已成功新增！"))
+                        else:
+                            # 如果地址已經被其他使用者新增了，給出提示
+                            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="此地址已被其他使用者新增，請聯繫管理員。"))
+                except FileNotFoundError:
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="地址清單檔案不存在，請聯繫管理員。"))
                 return
 
         elif msg == '重填':
-            if step in ['ask_id_number', 'ask_name', 'ask_birthday', 'ask_phone', 'ask_email', 'ask_address_1']:
+            if step in ['ask_id_number', 'ask_name', 'ask_birthday', 'ask_phone', 'ask_email']:
                 clear_temp_value(user_id)
                 question = {
                     'ask_id_number': "請重新輸入你的身分證字號：",
@@ -311,9 +328,30 @@ def handle_message(event):
                     'ask_birthday': "請重新輸入你的生日（格式 yyyy-mm-dd）：",
                     'ask_phone': "請重新輸入你的電話號碼：",
                     'ask_email': "請重新輸入你的 Email：",
-                    'ask_address_1': "請重新輸入你的戶名或門牌："
                 }
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text=question[step]))
+                return
+            elif step == 'ask_address':
+                update_user_step(user_id, "ask_address_1")
+                with open('addresses.json', 'r', encoding='utf-8') as f:
+                    addresses = json.load(f)
+
+                # 將地址轉換為 ButtonTemplate 的 actions
+                actions = [
+                    MessageAction(
+                        label=addr,
+                        text=addr
+                    ) for addr in addresses
+                ]
+                address_selection_msg = TemplateSendMessage(
+                    alt_text='請選擇你的戶名或門牌',
+                    template=ButtonsTemplate(
+                        title='請選擇你的戶名或門牌',
+                        text='請從以下選項中選擇你的地址：',
+                        actions=actions
+                    )
+                )
+                line_bot_api.reply_message(event.reply_token, address_selection_msg)
                 return
 
         elif step == 'ask_id_number':
@@ -396,7 +434,10 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, confirm_msg)
             return
 
+        # 在使用者想要新增戶名時，先產生選單給使用者選擇
+        # 順序 ask_address_1 -> ask_address
         elif step == 'ask_address_1':
+
             update_temp_value(user_id, msg)
             reply_text = f"您選擇的戶名是：{msg}，請輸入門牌"
             update_user_step(user_id, 'ask_address')
@@ -404,21 +445,41 @@ def handle_message(event):
 
 
         elif step == 'ask_address':
-            print('aaaa')
-            user = get_user(user_id)
-            update_temp_value(user_id, f"{user['temp_value']}_{msg}")
-            reply_text = f"您輸入的戶名或門牌是：{user['temp_value']}_{msg}，正確嗎？"
-            confirm_msg = TemplateSendMessage(
-                alt_text='請確認戶名或門牌',
-                template=ConfirmTemplate(
-                    text=reply_text,
-                    actions=[
-                        MessageAction(label='✅ 正確', text='確認'),
-                        MessageAction(label='🔁 重填', text='重填')
-                    ]
+            full_address = f"{user['temp_value']}_{msg}"
+    
+            # 檢查地址是否存在，但先不刪除
+            try:
+                with open('available_addresses.json', 'r', encoding='utf-8') as f:
+                    available_addresses = json.load(f)
+                    
+                    if full_address in available_addresses:
+                        # 地址存在，將完整地址暫存
+                        update_temp_value(user_id, full_address)
+                        
+                        reply_text = f"您輸入的戶名或門牌是：{full_address}，正確嗎？"
+                        confirm_msg = TemplateSendMessage(
+                            alt_text='請確認戶名或門牌',
+                            template=ConfirmTemplate(
+                                text=reply_text,
+                                actions=[
+                                    MessageAction(label='✅ 正確', text='確認'),
+                                    MessageAction(label='🔁 重填', text='重填')
+                                ]
+                            )
+                        )
+                        line_bot_api.reply_message(event.reply_token, confirm_msg)
+
+                    else:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(text="此地址不存在於可新增列表中，請確認後再試一次。")
+                        )
+                        
+            except FileNotFoundError:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="地址清單檔案不存在，請聯繫管理員。")
                 )
-            )
-            line_bot_api.reply_message(event.reply_token, confirm_msg)
             return
 
 
