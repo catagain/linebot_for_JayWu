@@ -1,6 +1,9 @@
 import os
 import pymysql
 from dotenv import load_dotenv
+import json
+import random
+import string
 
 load_dotenv()
 
@@ -115,3 +118,39 @@ def append_address(line_user_id, new_address):
             sql = "UPDATE users SET address = %s WHERE line_user_id = %s"
             cursor.execute(sql, (updated_address, line_user_id))
             conn.commit()
+
+
+# ============= addresses JSON 資料格式修改 =======================
+
+def generate_new_password(length=4):
+    letters = random.choices(string.ascii_letters, k=2)
+    digits = random.choices(string.digits, k=2)
+    combined = letters + digits
+    random.shuffle(combined)
+    return ''.join(combined)
+
+def update_address_info(address, new_password):
+    addresses_data = load_addresses_data()
+    for item in addresses_data:
+        if item['address'] == address:
+            item['password'] = new_password
+            break
+    save_addresses_data(addresses_data)
+
+def save_addresses_data(data):
+    with open('available_addresses.json', 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def get_address_info(address):
+    addresses_data = load_addresses_data()
+    for item in addresses_data:
+        if item['address'] == address:
+            return item
+    return None
+
+def load_addresses_data():
+    try:
+        with open('available_addresses.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []

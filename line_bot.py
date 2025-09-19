@@ -3,6 +3,8 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import *
 import json
+import random
+import string
 
 from dotenv import load_dotenv
 import os
@@ -20,8 +22,7 @@ handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 # address 選擇清單的函式化
 # 預售屋的房子特別標示
 # 檢查保固
-
-
+# 報修時的地址選擇
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -154,11 +155,124 @@ def handle_message(event):
                                 MessageAction(label="Email", text="修改_Email"),
                                 MessageAction(label="戶名或門牌", text="修改_戶名或門牌"),
                             ]
+                        ),
+                        CarouselColumn(
+                            title="新增資訊",
+                            text="請選擇要修改的欄位：",
+                            actions=[
+                                MessageAction(label="新增戶名聯絡人", text="新增戶名聯絡人"),
+                                MessageAction(label="Email", text="修改_Email"),
+                                MessageAction(label="戶名或門牌", text="修改_戶名或門牌"),
+                            ]
                         )
                     ]
                 )
             )
             line_bot_api.reply_message(event.reply_token, message)
+            return
+
+        elif msg == '我的地址密碼':
+            # 取得使用者綁定的所有地址，這部分是從你的資料庫讀取
+            
+            if not user['address']:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="你目前沒有綁定的地址。"))
+                return
+            
+            # 將地址字串轉換為列表，以便生成選單
+            addresses = user['addresses']
+            
+            # 檢查地址列表是否為空，理論上在上面已經處理過
+            if not addresses:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="你目前沒有綁定的地址。"))
+                return
+            
+            # 檢查地址數量是否超過限制
+            if len(addresses) > 10:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="你綁定的地址數量過多，請聯繫管理員。"))
+                return
+
+            carousel_columns = []
+            for addr in addresses:
+                # 建立每個地址的 actions
+                actions = [
+                    MessageAction(
+                        label="查詢密碼",
+                        text=f"查詢密碼：{addr}"
+                    ),
+                    MessageAction(
+                        label="重新生成密碼",
+                        text=f"重新生成密碼：{addr}"
+                    ),
+                    MessageAction(
+                        label="取消",
+                        text="取消"
+                    )
+                ]
+
+                # 建立一個新的 CarouselColumn，將地址作為 title
+                carousel_columns.append(
+                    CarouselColumn(
+                        title=addr,
+                        text="請選擇操作：",
+                        actions=actions
+                    )
+                )
+                
+            message = TemplateSendMessage(
+                alt_text="請選擇地址",
+                template=CarouselTemplate(columns=carousel_columns)
+            )
+            line_bot_api.reply_message(event.reply_token, message)
+            return
+
+        # 處理查詢密碼
+        elif msg.startswith('查詢密碼：'):
+            # 從訊息中提取出完整的地址
+            selected_address = msg.replace('查詢密碼：', '')
+            
+            # 檢查該使用者是否確實綁定了這個地址
+            if selected_address not in user['addresses']:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="你沒有綁定這個地址，無法查詢密碼。")
+                )
+                return
+
+            # 從 JSON 檔案中查詢密碼
+            address_info = get_address_info(selected_address)
+            if address_info:
+                reply_text = f"你的地址【{selected_address}】的密碼是：{address_info['password']}"
+            else:
+                reply_text = "該地址無密碼資訊，請聯繫管理員。"
+            
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+            return
+
+        # 處理重新生成密碼
+        elif msg.startswith('重新生成密碼：'):
+            # 從訊息中提取出完整的地址
+            selected_address = msg.replace('重新生成密碼：', '')
+            
+            # 檢查該使用者是否確實綁定了這個地址
+            addresses_str = user.get('addresses', '')
+            if selected_address not in user['addresses']:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="你沒有綁定這個地址，無法重新生成密碼。")
+                )
+                return
+
+            # 生成新的隨機密碼並更新 JSON 檔案
+            new_password = generate_new_password()
+            update_address_info(selected_address, new_password)
+            
+            reply_text = f"你的地址【{selected_address}】的新密碼是：{new_password}"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+            return
+
+        # 提供複數帳號想擁有相同戶名的方式
+        elif msg == "新增戶名聯絡人":
+
             return
         
         elif msg.startswith("修改_"):
@@ -190,10 +304,7 @@ def handle_message(event):
                     )
                 )
 
-                # 回覆使用者
-                line_bot_api.reply_message(event.reply_token, address_selection_msg)
-                
-                # 停止當前處理，等待使用者選擇
+                line_bot_api.reply_message(event.reply_token, address_selection_msg)               
                 return
 
             update_user_mode(user_id, 'modify_data')
@@ -202,8 +313,7 @@ def handle_message(event):
                 "修改_名字": ("ask_name", "請輸入新的名字："),
                 "修改_生日": ("ask_birthday", "請輸入新的生日（yyyy-mm-dd）："),
                 "修改_電話": ("ask_phone", "請輸入新的電話號碼："),
-                "修改_Email": ("ask_email", "請輸入新的 Email："),
-                "修改_戶名或門牌": ("ask_address_1", "請輸入新的戶名或門牌："),
+                "修改_Email": ("ask_email", "請輸入新的 Email：")
             }
             step, question = field_map[msg]
             update_user_step(user_id, step)
@@ -237,6 +347,28 @@ def handle_message(event):
                         with open('available_addresses.json', 'r+', encoding='utf-8') as f:
                             available_addresses = json.load(f)
 
+                            # 檢查完整的地址是否存在於列表中
+                            address_exists = any(item["address"] == full_address for item in available_addresses)
+
+                            if address_exists:
+                                # 如果地址存在，將完整地址暫存，並進入下一步驟詢問密碼
+                                update_temp_value(user_id, full_address)
+                                update_user_step(user_id, 'ask_password')
+                                
+                                line_bot_api.reply_message(
+                                    event.reply_token,
+                                    TextSendMessage(text="此地址存在，請輸入該地址的綁定密碼：")
+                                )
+                            else:
+                                # 如果地址不存在，給予錯誤提示，並讓使用者重填
+                                line_bot_api.reply_message(
+                                    event.reply_token,
+                                    TextSendMessage(text="此地址不存在於可新增列表中，請確認後重新輸入門牌號碼")
+                                )
+                                clear_temp_value(user_id)
+                                update_user_step(user_id, None)
+
+                            """ 舊 address 系統
                             if full_address in available_addresses:
                                 # **只有在確認時才從檔案中刪除地址**
                                 available_addresses.remove(full_address)
@@ -254,11 +386,14 @@ def handle_message(event):
                                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text="此地址已被其他使用者新增，請聯繫管理員。"))
                                 clear_temp_value(user_id)
                                 update_user_step(user_id, None)
+                            """
+
                     except FileNotFoundError:
                         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="地址清單檔案不存在，請聯繫管理員。"))
                         clear_temp_value(user_id)
                         update_user_step(user_id, None)
                     return
+
                 else:
                     update_user_field(user_id, step[4:], user['temp_value'])
                     update_user_step(user_id, None)
@@ -334,6 +469,29 @@ def handle_message(event):
                 full_address = user['temp_value']
 
                 try:
+                    available_addresses = json.load(f)
+
+                    # 檢查完整的地址是否存在於列表中
+                    address_exists = any(item["address"] == full_address for item in available_addresses)
+
+                    if address_exists:
+                        # 如果地址存在，將完整地址暫存，並進入下一步驟詢問密碼
+                        update_temp_value(user_id, full_address)
+                        update_user_step(user_id, 'ask_password')
+                        
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(text="此地址存在，請輸入該地址的綁定密碼：")
+                        )
+                    else:
+                        # 如果地址不存在，給予錯誤提示，並讓使用者重填
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(text="此地址不存在於可新增列表中，請確認後重新輸入門牌號碼")
+                        )
+                        clear_temp_value(user_id)
+                        update_user_step(user_id, None)
+                    """
                     with open('available_addresses.json', 'r+', encoding='utf-8') as f:
                         available_addresses = json.load(f)
 
@@ -354,6 +512,7 @@ def handle_message(event):
                             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="此地址已被其他使用者新增，請聯繫管理員。"))
                             clear_temp_value(user_id)
                             update_user_step(user_id, None)
+                    """
                 except FileNotFoundError:
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text="地址清單檔案不存在，請聯繫管理員。"))
                     clear_temp_value(user_id)
@@ -394,6 +553,49 @@ def handle_message(event):
                 )
                 line_bot_api.reply_message(event.reply_token, address_selection_msg)
                 return
+        # 新增地址的密碼
+        elif step == "ask_password":
+            entered_password = msg
+            full_address = user['temp_value']
+            
+            try:
+                with open('available_addresses.json', 'r', encoding='utf-8') as f:
+                    available_addresses = json.load(f)
+
+                # 找到對應地址的密碼
+                correct_password = None
+                for item in available_addresses:
+                    if item["address"] == full_address:
+                        correct_password = item["password"]
+                        break
+                
+                if correct_password and correct_password == entered_password:
+                    # 密碼正確，進入確認環節
+                    append_address(user_id, full_address)
+                    clear_temp_value(user_id)
+                    update_user_step(user_id, None)
+
+                    # 新增後更改密碼
+                    new_password = generate_new_password()
+                    update_address_info(full_address, new_password)
+                    
+                    reply_text = f"你的地址【{full_address}】的新密碼是：{new_password}"
+
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"✅ 新地址已成功新增！\n{reply_text}"))
+
+                else:
+                    # 密碼錯誤
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(text="密碼錯誤，請重新輸入：")
+                    )
+                    
+            except FileNotFoundError:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="地址清單檔案不存在，請聯繫管理員。")
+                )
+            return
 
         elif step == 'ask_id_number':
             update_temp_value(user_id, msg)
@@ -492,8 +694,10 @@ def handle_message(event):
             try:
                 with open('available_addresses.json', 'r', encoding='utf-8') as f:
                     available_addresses = json.load(f)
+
+                    address_exists = any(item["address"] == full_address for item in available_addresses)
                     
-                    if full_address in available_addresses:
+                    if address_exists:
                         # 地址存在，將完整地址暫存
                         update_temp_value(user_id, full_address)
                         
@@ -511,6 +715,8 @@ def handle_message(event):
                         line_bot_api.reply_message(event.reply_token, confirm_msg)
 
                     else:
+                        # 讓使用者停在這個狀態，可以一直輸入戶名
+                        update_user_step(user_id, 'ask_address')
                         line_bot_api.reply_message(
                             event.reply_token,
                             TextSendMessage(text="此地址不存在於可新增列表中，請確認後再試一次。")
