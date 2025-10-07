@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import os
 from db import *
 from imagemap import create_identity_imagemap
+import urllib.parse
 
 load_dotenv()
 
@@ -17,6 +18,14 @@ app = Flask(__name__)
 
 line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+
+# Google 表單的基礎 URL
+GOOGLE_FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSe_eMdAWSUVn7Ze6ZgF5F5aL3Dt2c4pEQGzZBzqFmuOp40EvQ/viewform"
+
+# Google 表單的欄位 ID
+ADDRESS_FIELD_ID = "entry.1219801190"
+NAME_FIELD_ID = "entry.1742058975"
+PHONE_FIELD_ID = "entry.1168269233"
 
 # TBD 
 # address 選擇清單的函式化
@@ -321,6 +330,43 @@ def handle_message(event):
             return
 
         elif msg == '我要報修':
+
+            addresses = user.get('addresses', []) 
+        
+            if not addresses:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="你目前沒有綁定的地址，請先新增地址。"))
+                return
+            
+            if len(addresses) > 10:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="你綁定的地址數量過多，請聯繫管理員。"))
+                return
+
+            carousel_columns = []
+            for addr in addresses:
+                actions = [
+                    MessageAction(
+                        label="選擇此地址報修",
+                        text=f"報修地址：{addr}" 
+                    )
+                ]
+                carousel_columns.append(
+                    CarouselColumn(
+                        title=addr,
+                        text="請選擇要報修的地址：",
+                        actions=actions
+                    )
+                )
+                
+            update_user_step(user_id, 'select_repairAddr')
+
+            message = TemplateSendMessage(
+                alt_text="請選擇報修地址",
+                template=CarouselTemplate(columns=carousel_columns)
+            )
+            line_bot_api.reply_message(event.reply_token, message)
+            return
+
+            """ 舊報修系統
             base_url = "https://docs.google.com/forms/d/e/1FAIpQLSe_eMdAWSUVn7Ze6ZgF5F5aL3Dt2c4pEQGzZBzqFmuOp40EvQ/viewform"
             entry_field_name = 'entry.1742058975'
             entry_field_address = 'entry.1219801190'
@@ -335,7 +381,47 @@ def handle_message(event):
             )
 
             line_bot_api.reply_message(event.reply_token, message)
-        
+            """
+        elif step == 'select_repairAddr' and msg.startswith('報修地址：'):
+            selected_address = msg.replace('報修地址：', '')
+            
+            # 準備預填資料
+            user_name = user.get('name', '未提供姓名')
+            user_phone = user.get('phone', '未提供電話')
+            
+            # --- 開始生成 Google 表單連結 ---
+            
+            # 進行 URL 編碼
+            encoded_address = urllib.parse.quote_plus(selected_address)
+            encoded_name = urllib.parse.quote_plus(user_name)
+            encoded_phone = urllib.parse.quote_plus(user_phone)
+
+            # 組合預填連結
+            prefilled_url = (
+                f"{GOOGLE_FORM_BASE_URL}?usp=pp_url"
+                f"&{ADDRESS_FIELD_ID}={encoded_address}"
+                f"&{NAME_FIELD_ID}={encoded_name}"
+                f"&{PHONE_FIELD_ID}={encoded_phone}"
+            )
+
+            # 生成按鈕訊息，導向 Google 表單
+            reply_msg = TemplateSendMessage(
+                alt_text='報修確認',
+                template=ButtonsTemplate(
+                    title=f'已選擇地址：{selected_address}',
+                    text='請點擊按鈕前往 Google 表單，填寫報修內容並完成送出。',
+                    actions=[
+                        URIAction(label='前往 Google 表單', uri=prefilled_url)
+                    ]
+                )
+            )
+            
+            # 清理狀態並發送訊息
+            line_bot_api.reply_message(event.reply_token, reply_msg)
+            clear_temp_value(user_id)
+            update_user_step(user_id, None)
+            return
+
         elif msg == '確認':
 
             # 如果使用者是修改資料，mode 會是 modify_data，則不繼續進行提問
