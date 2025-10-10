@@ -5,6 +5,8 @@ from linebot.models import *
 import json
 import random
 import string
+from datetime import datetime, timedelta
+import urllib.parse
 
 from dotenv import load_dotenv
 import os
@@ -31,7 +33,9 @@ PHONE_FIELD_ID = "entry.1168269233"
 # address 選擇清單的函式化
 # 預售屋的房子特別標示
 # 檢查保固
-# 報修時的地址選擇
+
+def get_current_date():
+    return datetime.now().strftime('%Y-%m-%d')
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -666,6 +670,10 @@ def handle_message(event):
                     update_address_info(full_address, new_password)
                     
                     reply_text = f"你的地址【{full_address}】的新密碼是：{new_password}"
+
+                    # 檢查是否是第一次新增地址，如果是的話，新增保固日期。
+                    current_date_str = get_current_date() 
+                    update_address_warranty_start_date(full_address, current_date_str)
 
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"✅ 新地址已成功新增！\n{reply_text}"))
 

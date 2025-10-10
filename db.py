@@ -154,3 +154,25 @@ def load_addresses_data():
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return []
+
+def update_address_warranty_start_date(address, start_date):
+    """
+    更新指定地址的保固開始日期。
+    只有當該地址的 warranty_start_date 欄位為空時，才會寫入新日期。
+    """
+    addresses_data = load_addresses_data()
+    updated = False
+    
+    for item in addresses_data:
+        if item.get('address') == address:
+            # 檢查保固開始日期是否已存在且非空
+            if not item.get('warranty_start_date'):
+                # 首次寫入保固開始日期
+                item['warranty_start_date'] = start_date
+                updated = True
+            break
+            
+    if updated:
+        save_addresses_data(addresses_data)
+        return True # 表示已更新
+    return False # 表示未更新（因為日期已存在）
