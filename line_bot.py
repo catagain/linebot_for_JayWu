@@ -32,7 +32,6 @@ PHONE_FIELD_ID = "entry.1168269233"
 # TBD 
 # address 選擇清單的函式化
 # 預售屋的房子特別標示
-# 檢查保固
 
 def get_current_date():
     return datetime.now().strftime('%Y-%m-%d')
@@ -389,39 +388,99 @@ def handle_message(event):
         elif step == 'select_repairAddr' and msg.startswith('報修地址：'):
             selected_address = msg.replace('報修地址：', '')
             
-            # 準備預填資料
-            user_name = user.get('name', '未提供姓名')
-            user_phone = user.get('phone', '未提供電話')
+            # 1. 執行保固查詢邏輯
+            address_info = get_address_info(selected_address)
+            warranty_start_date_str = address_info.get('warranty_start_date') if address_info else None
             
-            # --- 開始生成 Google 表單連結 ---
+            reply_text = f"【{selected_address}】保固狀態檢查：\n"
+            warranty_status = "UNKNOWN"
+
+            if not warranty_start_date_str:
+                reply_text += "🔴 **查無保固紀錄。**\n此地址可能為首次啟用，報修後將啟動保固紀錄。"
+                warranty_status = "NO_RECORD"
+            else:
+                try:
+                    # 執行日期計算：保固期為 3 年
+                    start_date = datetime.strptime(warranty_start_date_str, '%Y-%m-%d').date()
+                    end_date = start_date + timedelta(days=3 * 365)
+                    current_date = datetime.strptime(get_current_date(), '%Y-%m-%d').date()
+
+                    if current_date <= end_date:
+                        # 保固有效
+                        days_remaining = (end_date - current_date).days
+                        reply_text += f"🟢 **保固有效！**\n"
+                        reply_text += f"保固截止日：{end_date.strftime('%Y-%m-%d')}\n"
+                        reply_text += f"剩餘天數：約 {days_remaining} 天"
+                        warranty_status = "VALID"
+                    else:
+                        # 保固失效
+                        reply_text += f"⚫ **保固已過期。**\n"
+                        reply_text += f"保固截止日：{end_date.strftime('%Y-%m-%d')}"
+                        warranty_status = "EXPIRED"
+                except ValueError:
+                    reply_text += "🔴 系統紀錄日期格式錯誤，請聯繫管理員。"
+                    warranty_status = "ERROR"
+
+            # 2. 將地址暫存，並進入確認步驟
+            update_temp_value(user_id, selected_address)
+            update_user_step(user_id, 'confirm_warranty')
             
-            # 進行 URL 編碼
-            encoded_address = urllib.parse.quote_plus(selected_address)
-            encoded_name = urllib.parse.quote_plus(user_name)
-            encoded_phone = urllib.parse.quote_plus(user_phone)
-
-            # 組合預填連結
-            prefilled_url = (
-                f"{GOOGLE_FORM_BASE_URL}?usp=pp_url"
-                f"&{ADDRESS_FIELD_ID}={encoded_address}"
-                f"&{NAME_FIELD_ID}={encoded_name}"
-                f"&{PHONE_FIELD_ID}={encoded_phone}"
-            )
-
-            # 生成按鈕訊息，導向 Google 表單
-            reply_msg = TemplateSendMessage(
-                alt_text='報修確認',
-                template=ButtonsTemplate(
-                    title=f'已選擇地址：{selected_address}',
-                    text='請點擊按鈕前往 Google 表單，填寫報修內容並完成送出。',
+            # 3. 建立確認訊息
+            confirm_msg = TemplateSendMessage(
+                alt_text='請確認是否繼續報修',
+                template=ConfirmTemplate(
+                    text=f"{reply_text}\n\n您是否要針對此地址繼續進行報修？",
                     actions=[
-                        URIAction(label='前往 Google 表單', uri=prefilled_url)
+                        MessageAction(label='✅ 繼續報修', text='確認繼續報修'),
+                        MessageAction(label='❌ 取消報修', text='取消報修')
                     ]
                 )
             )
-            
-            # 清理狀態並發送訊息
-            line_bot_api.reply_message(event.reply_token, reply_msg)
+            line_bot_api.reply_message(event.reply_token, confirm_msg)
+            return
+
+        elif step == 'confirm_warranty':
+            selected_address = user['temp_value']
+
+            if msg == '確認繼續報修':
+
+                # 準備預填資料
+                user_name = user.get('name', '未提供姓名')
+                user_phone = user.get('phone', '未提供電話')
+                
+                # --- 開始生成 Google 表單連結 ---
+                
+                # 進行 URL 編碼
+                encoded_address = urllib.parse.quote_plus(selected_address)
+                encoded_name = urllib.parse.quote_plus(user_name)
+                encoded_phone = urllib.parse.quote_plus(user_phone)
+
+                # 組合預填連結
+                prefilled_url = (
+                    f"{GOOGLE_FORM_BASE_URL}?usp=pp_url"
+                    f"&{ADDRESS_FIELD_ID}={encoded_address}"
+                    f"&{NAME_FIELD_ID}={encoded_name}"
+                    f"&{PHONE_FIELD_ID}={encoded_phone}"
+                )
+
+                # 生成按鈕訊息，導向 Google 表單
+                reply_msg = TemplateSendMessage(
+                    alt_text='報修確認',
+                    template=ButtonsTemplate(
+                        title=f'已選擇地址：{selected_address}',
+                        text='請點擊按鈕前往 Google 表單，填寫報修內容並完成送出。',
+                        actions=[
+                            URIAction(label='前往 Google 表單', uri=prefilled_url)
+                        ]
+                    )
+                )
+                
+                line_bot_api.reply_message(event.reply_token, reply_msg)
+
+            elif msg == '取消報修':
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 報修流程已取消。"))
+
+            # 清理狀態
             clear_temp_value(user_id)
             update_user_step(user_id, None)
             return
