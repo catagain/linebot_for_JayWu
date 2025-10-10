@@ -148,6 +148,11 @@ def get_address_info(address):
             return item
     return None
 
+# 檢查地址是不是成屋
+def is_ready_property(address):
+    info = get_address_info(address)
+    return info.get('property_type') == '成屋'
+
 def load_addresses_data():
     try:
         with open('available_addresses.json', 'r', encoding='utf-8') as f:

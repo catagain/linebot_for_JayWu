@@ -336,16 +336,21 @@ def handle_message(event):
 
             addresses = user.get('addresses', []) 
         
-            if not addresses:
+            # 篩選成屋地址，剔除預售屋
+            ready_property = [
+                addr for addr in addresses if is_ready_property(addr)
+            ]
+
+            if not ready_property:
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text="你目前沒有綁定的地址，請先新增地址。"))
                 return
             
-            if len(addresses) > 10:
+            if len(ready_property) > 10:
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text="你綁定的地址數量過多，請聯繫管理員。"))
                 return
 
             carousel_columns = []
-            for addr in addresses:
+            for addr in ready_property:
                 actions = [
                     MessageAction(
                         label="選擇此地址報修",
