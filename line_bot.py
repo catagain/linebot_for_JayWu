@@ -7,6 +7,9 @@ import random
 import string
 from datetime import datetime, timedelta
 import urllib.parse
+from util.address import *
+from util.image import *
+
 
 from dotenv import load_dotenv
 import os
@@ -27,6 +30,7 @@ GOOGLE_FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSe_eMdAWSUVn7Ze
 ADDRESS_FIELD_ID = "entry.1219801190"
 NAME_FIELD_ID = "entry.1742058975"
 PHONE_FIELD_ID = "entry.1168269233"
+EMAIL_FIELD_ID = "entry.83825998"
 
 # 使用者的切換選單 ID
 RICH_MENU_GENERAL_ID = "rm-general-xxxxxx"
@@ -36,8 +40,6 @@ RICH_MENU_PRESELL_ID = "rm-presell-zzzzzz"
 # TBD 
 # address 選擇清單的函式化
 # 切換選單 ID 功能
-# 報修表單 email 自動填入功能
-# 保固提醒更改
 
 def get_current_date():
     return datetime.now().strftime('%Y-%m-%d')
@@ -66,14 +68,18 @@ def callback():
 @handler.add(FollowEvent)
 def handle_follow(event):
     user_id = event.source.user_id
+    text_message = TextSendMessage(text=f'{line_bot_api.get_profile(user_id).display_name} 歡迎加入鷁欣/鷁崎官方網站!\n\n在這裡，您可以：\n🔧 隨時線上報修，問題我們來幫你解決！\n📢 即時收到最新消息，不漏接重要通知！\n\n請根據提示逐步建立個人資料，以便未來輕鬆申請修繕。\n\n有任何疑問，也歡迎直接留言，我們都會盡快回覆你唷！(hahaha)')
 
     # 如果第一次加好友，就新增到資料庫（避免重複）
     if not user_exists(user_id):
+        
         add_user(user_id)
+        # 傳送 imagemap 訊息詢問身分
+        imagemap_msg = create_identity_imagemap()
+        line_bot_api.reply_message(event.reply_token, [text_message, imagemap_msg])
+        return
 
-    # 傳送 imagemap 訊息詢問身分
-    imagemap_msg = create_identity_imagemap()
-    line_bot_api.reply_message(event.reply_token, imagemap_msg)
+    line_bot_api.reply_message(event.reply_token, text_message)
 
 # ----------------------------------------------------
 # 處理 Rich Menu 頁籤切換邏輯
@@ -155,19 +161,10 @@ def handle_message(event):
                 TextSendMessage(text="請先選擇身分喔！")
             )
 
-    # 如果是住戶，進行多輪提問，取得對方資訊
-    #if user['identity'] == '住戶':
+    # 如果已經選擇身分，進行多輪提問，取得對方資訊
     if user['identity']:
         step = user['step']
         mode = user['mode']
-
-        if msg == '我是住戶':
-            update_user_step(user_id, 'ask_id_number')
-            update_user_mode(user_id, 'initial_fill')
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=f"你選擇的身分是：{msg[-2:]}\n請輸入您的身分字號：")
-            )
 
         if msg == '我的個人資料':
             # 取得使用者所有資訊
@@ -189,13 +186,6 @@ def handle_message(event):
                     event.reply_token,
                     TextSendMessage(text=profile_text)
                 )
-            """
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="請先完成住戶身份認證才能查看個人資料喔！")
-                )
-            """
             return
 
         # 讓使用者修改個人資訊
@@ -209,7 +199,7 @@ def handle_message(event):
                 template=CarouselTemplate(
                     columns=[
                         CarouselColumn(
-                            thumbnail_image_url = 'https://cdn.discordapp.com/attachments/873571198498377799/1426414059758157935/skirk.png?ex=68eb231d&is=68e9d19d&hm=a750d3cd305fc92a47553e45c7d686bfe9cad32a102fced385da41c0924f8115&',
+                            thumbnail_image_url = IMAGE_ID,
                             title="身份證字號",
                             text="修改身份證字號",
                             actions=[
@@ -217,7 +207,7 @@ def handle_message(event):
                             ]
                         ),
                         CarouselColumn(
-                            thumbnail_image_url = 'https://cdn.discordapp.com/attachments/873571198498377799/1426414059758157935/skirk.png?ex=68eb231d&is=68e9d19d&hm=a750d3cd305fc92a47553e45c7d686bfe9cad32a102fced385da41c0924f8115&',
+                            thumbnail_image_url = IMAGE_NAME,
                             title="名字",
                             text="修改名字",
                             actions=[
@@ -225,7 +215,7 @@ def handle_message(event):
                             ]
                         ),
                         CarouselColumn(
-                            thumbnail_image_url = 'https://cdn.discordapp.com/attachments/873571198498377799/1426414059758157935/skirk.png?ex=68eb231d&is=68e9d19d&hm=a750d3cd305fc92a47553e45c7d686bfe9cad32a102fced385da41c0924f8115&',
+                            thumbnail_image_url = IMAGE_BIRTHDAY,
                             title="生日",
                             text="修改生日",
                             actions=[
@@ -233,7 +223,7 @@ def handle_message(event):
                             ]
                         ),
                         CarouselColumn(
-                            thumbnail_image_url = 'https://cdn.discordapp.com/attachments/873571198498377799/1426414059758157935/skirk.png?ex=68eb231d&is=68e9d19d&hm=a750d3cd305fc92a47553e45c7d686bfe9cad32a102fced385da41c0924f8115&',
+                            thumbnail_image_url = IMAGE_PHONE,
                             title="電話",
                             text="修改電話",
                             actions=[
@@ -241,7 +231,7 @@ def handle_message(event):
                             ]
                         ),
                         CarouselColumn(
-                            thumbnail_image_url = 'https://cdn.discordapp.com/attachments/873571198498377799/1426414059758157935/skirk.png?ex=68eb231d&is=68e9d19d&hm=a750d3cd305fc92a47553e45c7d686bfe9cad32a102fced385da41c0924f8115&',
+                            thumbnail_image_url = IMAGE_EMAIL,
                             title="Email",
                             text="修改 Email",
                             actions=[
@@ -249,9 +239,9 @@ def handle_message(event):
                             ]
                         ),
                         CarouselColumn(
-                            thumbnail_image_url = 'https://cdn.discordapp.com/attachments/873571198498377799/1426414059758157935/skirk.png?ex=68eb231d&is=68e9d19d&hm=a750d3cd305fc92a47553e45c7d686bfe9cad32a102fced385da41c0924f8115&',
-                            title="戶名或門牌",
-                            text="新增戶名或門牌",
+                            thumbnail_image_url = IMAGE_ADDR,
+                            title="建案",
+                            text="新增建案",
                             actions=[
                                 MessageAction(label="確認", text="修改_戶名或門牌"),
                             ]
@@ -368,41 +358,8 @@ def handle_message(event):
                 update_user_mode(user_id, 'modify_data')
                 update_user_step(user_id, 'ask_address_1')
                 
-                with open('addresses.json', 'r', encoding='utf-8') as f:
-                    addresses = json.load(f)
-
-                # 檢查地址列表是否為空
-                if not addresses:
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(text="抱歉，目前沒有可供選擇的地址資訊。")
-                    )
-                    return
-
-                # 1. 準備 CarouselTemplate 的 Columns 列表
-                columns = []
-
-                # 2. 遍歷地址列表，為每個地址建立一個 CarouselColumn
-                for addr in addresses:
-                    
-                    # 每個地址 (addr) 成為一個 Column
-                    column = CarouselColumn(
-                        thumbnail_image_url = 'https://cdn.discordapp.com/attachments/873571198498377799/1426414059758157935/skirk.png?ex=68eb231d&is=68e9d19d&hm=a750d3cd305fc92a47553e45c7d686bfe9cad32a102fced385da41c0924f8115&',
-                        title=addr, 
-                        text='請確認並選擇此地址',
-                        actions=[
-                            MessageAction(
-                                label='選擇此地址', 
-                                text=addr 
-                            )
-                        ]
-                    )
-                    columns.append(column)
-
-                    # *** LINE CarouselTemplate 限制: 最多只能有 10 個 Columns ***
-                    # 如果地址數量超過 10 個，需要分頁或提供其他選擇方式
-                    if len(columns) >= 10:
-                        break # 達到上限，停止添加
+                # 得到目前有的所有地址資訊，並把它做成 column 回傳
+                columns = create_addresses_select_columns()
 
                 # 3. 建立選單訊息
                 address_selection_msg = TemplateSendMessage(
@@ -414,34 +371,6 @@ def handle_message(event):
 
                 line_bot_api.reply_message(event.reply_token, address_selection_msg)
                 return
-
-
-                """ 舊 addresds 選擇系統
-                # 讀取本地的 addresses.json 檔案
-                with open('addresses.json', 'r', encoding='utf-8') as f:
-                    addresses = json.load(f)
-
-                # 將地址轉換為 ButtonTemplate 的 actions
-                actions = [
-                    MessageAction(
-                        label=addr,
-                        text=addr
-                    ) for addr in addresses
-                ]
-
-                # 建立選單訊息
-                address_selection_msg = TemplateSendMessage(
-                    alt_text='請選擇你的戶名或門牌',
-                    template=ButtonsTemplate(
-                        title='請選擇你的戶名或門牌',
-                        text='請從以下選項中選擇你的地址：',
-                        actions=actions
-                    )
-                )
-
-                line_bot_api.reply_message(event.reply_token, address_selection_msg)               
-                return
-                """
 
             update_user_mode(user_id, 'modify_data')
             field_map = {
@@ -498,22 +427,6 @@ def handle_message(event):
             line_bot_api.reply_message(event.reply_token, message)
             return
 
-            """ 舊報修系統
-            base_url = "https://docs.google.com/forms/d/e/1FAIpQLSe_eMdAWSUVn7Ze6ZgF5F5aL3Dt2c4pEQGzZBzqFmuOp40EvQ/viewform"
-            entry_field_name = 'entry.1742058975'
-            entry_field_address = 'entry.1219801190'
-            entry_field_phone = 'entry.1168269233'
-
-            user_name = user['name']
-            user_address = user['address']
-            user_phone = user['phone']
-            prefill_url = f'{base_url}?usp=pp_url&{entry_field_name}={user_name}&{entry_field_address}={user_address}&{entry_field_phone}={user_phone}'
-            message = TextSendMessage(
-                text=f"請填寫以下報修表單 👇\n{prefill_url}"
-            )
-
-            line_bot_api.reply_message(event.reply_token, message)
-            """
         elif step == 'select_repairAddr' and msg.startswith('報修地址：'):
             selected_address = msg.replace('報修地址：', '')
             
@@ -536,25 +449,7 @@ def handle_message(event):
                     reply_text += "🔧保固期間：\n"
                     reply_text += "．門窗、粉刷、地壁磚、水電設備等一年期滿\n．外牆防水 3 年\n．結構保固 15 年\n"
                     reply_text += "保固期滿可繼續提供檢查修繕之服務，費用須由客戶承擔！"
-                    # 不需要提供保固的檢查，讓使用者自己計算
-                    """
-                    # 執行日期計算：保固期為 3 年
-                    end_date = start_date + timedelta(days=3 * 365)
-                    current_date = datetime.strptime(get_current_date(), '%Y-%m-%d').date()
 
-                    if current_date <= end_date:
-                        # 保固有效
-                        days_remaining = (end_date - current_date).days
-                        reply_text += f"🟢 **保固有效！**\n"
-                        reply_text += f"保固截止日：{end_date.strftime('%Y-%m-%d')}\n"
-                        reply_text += f"剩餘天數：約 {days_remaining} 天"
-                        warranty_status = "VALID"
-                    else:
-                        # 保固失效
-                        reply_text += f"⚫ **保固已過期。**\n"
-                        reply_text += f"保固截止日：{end_date.strftime('%Y-%m-%d')}"
-                        warranty_status = "EXPIRED"
-                    """
                 except ValueError:
                     reply_text += "🔴 系統紀錄日期格式錯誤，請聯繫管理員。"
                     warranty_status = "ERROR"
@@ -585,6 +480,7 @@ def handle_message(event):
                 # 準備預填資料
                 user_name = user.get('name', '未提供姓名')
                 user_phone = user.get('phone', '未提供電話')
+                user_email = user.get('email', '為提供 Email')
                 
                 # --- 開始生成 Google 表單連結 ---
                 
@@ -592,6 +488,7 @@ def handle_message(event):
                 encoded_address = urllib.parse.quote_plus(selected_address)
                 encoded_name = urllib.parse.quote_plus(user_name)
                 encoded_phone = urllib.parse.quote_plus(user_phone)
+                encoded_email = urllib.parse.quote_plus(user_email)
 
                 # 組合預填連結
                 prefilled_url = (
@@ -599,6 +496,7 @@ def handle_message(event):
                     f"&{ADDRESS_FIELD_ID}={encoded_address}"
                     f"&{NAME_FIELD_ID}={encoded_name}"
                     f"&{PHONE_FIELD_ID}={encoded_phone}"
+                    f"&{EMAIL_FIELD_ID}={encoded_email}"
                 )
 
                 # 生成按鈕訊息，導向 Google 表單
@@ -627,7 +525,8 @@ def handle_message(event):
 
             # 如果使用者是修改資料，mode 會是 modify_data，則不繼續進行提問
             if mode == 'modify_data':
-                # 將地址額外詢問
+
+                # 地址額外詢問
                 if step == 'ask_address':
                     full_address = user['temp_value']
                     try:
@@ -654,26 +553,6 @@ def handle_message(event):
                                 )
                                 clear_temp_value(user_id)
                                 update_user_step(user_id, None)
-
-                            """ 舊 address 系統
-                            if full_address in available_addresses:
-                                # **只有在確認時才從檔案中刪除地址**
-                                available_addresses.remove(full_address)
-                                f.seek(0)
-                                json.dump(available_addresses, f, ensure_ascii=False, indent=2)
-                                f.truncate()
-
-                                # 將地址寫入使用者資料
-                                append_address(user_id, full_address)
-                                clear_temp_value(user_id)
-                                update_user_step(user_id, None)
-                                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 新地址已成功新增！"))
-                            else:
-                                # 如果地址已經被其他使用者新增了，給出提示
-                                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="此地址已被其他使用者新增，請聯繫管理員。"))
-                                clear_temp_value(user_id)
-                                update_user_step(user_id, None)
-                            """
 
                     except FileNotFoundError:
                         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="地址清單檔案不存在，請聯繫管理員。"))
@@ -729,44 +608,34 @@ def handle_message(event):
                     return
 
                 else :
+                    # 住戶需要先綁定地址
                     update_user_step(user_id, 'ask_address_1')
-                
-                    # 讀取本地的 addresses.json 檔案
-                    with open('addresses.json', 'r', encoding='utf-8') as f:
-                        addresses = json.load(f)
+                    
+                    # 得到目前有的所有地址資訊，並把它做成 column 回傳
+                    columns = create_addresses_select_columns()
 
-                    # 將地址轉換為 ButtonTemplate 的 actions
-                    actions = [
-                        MessageAction(
-                            label=addr,
-                            text=addr
-                        ) for addr in addresses
-                    ]
+                    # 3. 建立選單訊息
+                    text_message = TextSendMessage(text='請選擇你的戶名或門牌')
 
-                    # 建立選單訊息
                     address_selection_msg = TemplateSendMessage(
                         alt_text='請選擇你的戶名或門牌',
-                        template=ButtonsTemplate(
-                            title='請選擇你的戶名或門牌',
-                            text='請從以下選項中選擇你的地址：',
-                            actions=actions
+                        template=CarouselTemplate(
+                            columns=columns 
                         )
                     )
 
-                    line_bot_api.reply_message(event.reply_token, address_selection_msg)
+                    line_bot_api.reply_message(event.reply_token, [text_message, address_selection_msg])
+
                     return
 
             elif step == 'ask_address':
                 user = get_user(user_id)
 
-                # 不再讓使用者可以更改地址，而是只能新增
-                # update_user_field(user_id, 'address', user['temp_value'])
-                # append_address(user_id, user['temp_value'])
-
                 full_address = user['temp_value']
 
                 try:
-                    available_addresses = json.load(f)
+                    with open('available_addresses.json', 'r', encoding='utf-8') as f:
+                        available_addresses = json.load(f)
 
                     # 檢查完整的地址是否存在於列表中
                     address_exists = any(item["address"] == full_address for item in available_addresses)
@@ -788,28 +657,7 @@ def handle_message(event):
                         )
                         clear_temp_value(user_id)
                         update_user_step(user_id, None)
-                    """
-                    with open('available_addresses.json', 'r+', encoding='utf-8') as f:
-                        available_addresses = json.load(f)
 
-                        if full_address in available_addresses:
-                            # **只有在確認時才從檔案中刪除地址**
-                            available_addresses.remove(full_address)
-                            f.seek(0)
-                            json.dump(available_addresses, f, ensure_ascii=False, indent=2)
-                            f.truncate()
-
-                            # 將地址寫入使用者資料
-                            append_address(user_id, full_address)
-                            clear_temp_value(user_id)
-                            update_user_step(user_id, None)
-                            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="✅ 新地址已成功新增！\n完成所有填答啦！"))
-                        else:
-                            # 如果地址已經被其他使用者新增了，給出提示
-                            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="此地址已被其他使用者新增，請聯繫管理員。"))
-                            clear_temp_value(user_id)
-                            update_user_step(user_id, None)
-                    """
                 except FileNotFoundError:
                     line_bot_api.reply_message(event.reply_token, TextSendMessage(text="地址清單檔案不存在，請聯繫管理員。"))
                     clear_temp_value(user_id)
@@ -850,6 +698,7 @@ def handle_message(event):
                 )
                 line_bot_api.reply_message(event.reply_token, address_selection_msg)
                 return
+
         # 新增地址的密碼
         elif step == "ask_password":
             entered_password = msg
@@ -1036,7 +885,7 @@ def handle_message(event):
 
 
     # 雖然不期望他們選擇訪客，但還是做一下
-    elif user['identity'] == '我是訪客':
+    elif user['identity'] == '訪客':
         if msg == '我要報修':
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請先輸入身分才能報修喔"))
             return
