@@ -1,78 +1,119 @@
 import json
+import os
 import string
 
-def load_addresses_data():
+def load_existing_addresses():
+    """載入現有的地址數據"""
     try:
         with open('available_addresses.json', 'r', encoding='utf-8') as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except FileNotFoundError:
+        return []
+    except json.JSONDecodeError:
+        print("警告: JSON 文件格式錯誤，將創建新文件")
         return []
 
-
-def save_addresses_data(data):
+def save_addresses(addresses):
+    """保存地址數據到文件"""
     with open('available_addresses.json', 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(addresses, f, ensure_ascii=False, indent=2)
+    print(f"成功保存 {len(addresses)} 筆地址資料")
 
-def transform_address(input_str):
-    """
-    將 "數字+字母" 的字串格式轉換為 "數字樓之中文數字" 的格式。
-    例如: "1A" -> "1樓之一", "2B" -> "2樓之二"
-    假設字母為大寫，且從 A 開始依序代表 1, 2, 3, ...
+def generate_building_addresses(case_name, floor_range, units, password):
+    """生成大樓類型的地址"""
+    addresses = []
+    start_floor, end_floor = map(int, floor_range.split('-'))
+    
+    # 轉換戶別數為相應的字母，例如 1=A, 2=B, 3=C...
+    unit_letters = string.ascii_uppercase[:units]
+    
+    for floor in range(start_floor, end_floor + 1):
+        for unit in unit_letters:
+            address = {
+                "address": f"{case_name}_{floor}{unit}",
+                "password": password
+            }
+            addresses.append(address)
+    
+    return addresses
 
-    :param input_str: 原始字串 (例如 "1A", "2B")
-    :return: 轉換後的字串 (例如 "1樓之一", "2樓之二")
-    """
-    if len(input_str) < 2:
-        return input_str  # 如果字串太短，無法處理，則返回原始字串
+def generate_house_addresses(case_name, units, password):
+    """生成透天類型的地址"""
+    addresses = []
+    
+    for i in range(1, units + 1):
+        address = {
+            "address": f"{case_name}_{i}A",
+            "password": password
+        }
+        addresses.append(address)
+    
+    return addresses
 
-    # 1. 拆分字串
-    # 假設第一個字元或多個連續數字是樓層，最後一個字元是字母
-    floor_part = input_str[:-1]  # 取得除了最後一個字元以外的部分 (樓層)
-    letter_part = input_str[-1]  # 取得最後一個字元 (字母)
+def check_duplicate_addresses(existing_addresses, new_addresses):
+    """檢查是否有重複的地址"""
+    existing_addr_set = {addr["address"] for addr in existing_addresses}
+    duplicates = []
+    
+    for addr in new_addresses:
+        if addr["address"] in existing_addr_set:
+            duplicates.append(addr["address"])
+    
+    return duplicates
 
-    # 2. 字母轉換成數字
-    # 使用 ord() 函數取得字母的 ASCII 值
-    # 大寫字母 'A' 的 ASCII 值是 65
-    # 所以 'A' 對應 1 (65 - 65 + 1 = 1)
-    # 'B' 對應 2 (66 - 65 + 1 = 2)
-    try:
-        letter_number = ord(letter_part.upper()) - ord('A') + 1
-    except TypeError:
-        # 如果最後一個字元不是單個字元，則返回錯誤訊息或原始字串
-        return f"錯誤: 最後一個字元 '{letter_part}' 無法識別為單一字母。"
-
-    # 3. 數字轉換成中文數字
-    chinese_numbers = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
-    if 1 <= letter_number <= 10:
-        chinese_num = chinese_numbers[letter_number]
+def main():
+    print("=== 批量新增地址資料 ===")
+    
+    # 載入現有地址數據
+    existing_addresses = load_existing_addresses()
+    print(f"已載入現有地址數據，共 {len(existing_addresses)} 筆")
+    
+    # 獲取用戶輸入
+    case_name = input("請輸入案名 (如 鷁欣緻境): ")
+    
+    building_type = ""
+    while building_type not in ["1", "2"]:
+        building_type = input("請選擇建築類型 (1:大樓 2:透天): ")
+    
+    # 根據建築類型，生成對應的地址
+    new_addresses = []
+    if building_type == "1":  # 大樓
+        units = int(input("請輸入每層戶別數 (如 4 表示 A,B,C,D): "))
+        floor_range = input("請輸入樓層範圍 (如 2-9): ")
+        password = input("請輸入預設密碼: ")
+        
+        new_addresses = generate_building_addresses(case_name, floor_range, units, password)
+    else:  # 透天
+        units = int(input("請輸入戶別數: "))
+        password = input("請輸入預設密碼: ")
+        
+        new_addresses = generate_house_addresses(case_name, units, password)
+    
+    # 檢查重複地址
+    duplicates = check_duplicate_addresses(existing_addresses, new_addresses)
+    if duplicates:
+        print(f"警告: 發現 {len(duplicates)} 筆重複地址:")
+        for addr in duplicates:
+            print(f"- {addr}")
+        
+        confirm = input("是否仍要繼續新增? (y/n): ")
+        if confirm.lower() != 'y':
+            print("取消新增操作")
+            return
+    
+    # 預覽新增的地址
+    print(f"\n即將新增 {len(new_addresses)} 筆地址:")
+    for addr in new_addresses:
+        print(f"- {addr['address']} (密碼: {addr['password']})")
+    
+    confirm = input("\n確認新增這些地址? (y/n): ")
+    if confirm.lower() == 'y':
+        # 合併並保存地址
+        all_addresses = existing_addresses + new_addresses
+        save_addresses(all_addresses)
+        print("地址新增成功!")
     else:
-        # 如果數字超出預期範圍 (例如 'K' = 11 或更多)，則用原始數字
-        chinese_num = str(letter_number) # 或者你可以選擇一個更複雜的中文數字轉換函數
+        print("取消新增操作")
 
-    # 4. 組合成目標格式
-    result = f"{floor_part}樓之{chinese_num}"
-    return result
-
-addr_list = load_addresses_data()
-
-addr_prefix = input("請輸入想要變更的案名：") 
-new_addr = input("請輸入新的地址:")
-
-if addr_list:
-    for item in addr_list:
-        if item['address'].startswith(addr_prefix):
-            item["old_name"] = item['address']
-            item['address'] = new_addr + '_' + transform_address(item['old_name'].split('_')[1])
-            item['property_type'] = '成屋'
-
-    print(f"將 {addr_prefix} 由預售屋更改為成屋")
-
-    save_addresses_data(addr_list)
-
-    print("已更改完成")
-
-else :
-    print("available_addresses.json not found.")
-
-
-
+if __name__ == "__main__":
+    main()

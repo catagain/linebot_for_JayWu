@@ -1,158 +1,135 @@
-from flask import Flask, request, abort
-from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import *
+from linebot import LineBotApi
+from linebot.models import RichMenu, RichMenuArea, RichMenuBounds, MessageAction
+from PIL import Image  # 需要安裝：pip install Pillow
 
 from dotenv import load_dotenv
 import os
-from db import *
-from imagemap import create_identity_imagemap
-
 load_dotenv()
 
-line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
+# 獲取 LINE_CHANNEL_ACCESS_TOKEN
+CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 
-def create_general_rich_menu():
-    """創建【通用功能選單】的 Rich Menu 骨架。"""
+# API 客戶端
+line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
+
+# 直接使用 PNG 圖片路徑
+PNG_IMAGE_PATH = "image/richmenu.png"  # 確保這個路徑是正確的
+
+# 刪除現有的 Rich Menu
+def delete_rich_menu():
+    """刪除所有現有的 Rich Menu"""
+    try:
+        # 獲取所有 Rich Menu ID
+        rich_menu_list = line_bot_api.get_rich_menu_list()
+        
+        # 刪除每個 Rich Menu
+        for rich_menu in rich_menu_list:
+            line_bot_api.delete_rich_menu(rich_menu.rich_menu_id)
+            print(f"已刪除 Rich Menu: {rich_menu.rich_menu_id}")
+        
+        print("所有 Rich Menu 已刪除")
+        return True
+    except Exception as e:
+        print(f"刪除 Rich Menu 失敗: {str(e)}")
+        return False
+
+def check_image_size(image_path):
+    """檢查圖片尺寸是否符合要求"""
+    try:
+        img = Image.open(image_path)
+        width, height = img.size
+        print(f"圖片尺寸: {width}x{height}")
+        
+        if width != 1242 or height != 847:
+            print(f"警告: 圖片尺寸 {width}x{height} 不符合 LINE Rich Menu 要求 (1242x847)")
+            return False
+            
+        # 檢查檔案大小
+        file_size = os.path.getsize(image_path) / 1024  # KB
+        print(f"圖片檔案大小: {file_size:.2f} KB")
+        
+        if file_size > 1000:  # 1MB = 1000KB
+            print(f"警告: 圖片檔案大小 {file_size:.2f} KB 超過 LINE Rich Menu 限制 (1000 KB)")
+            return False
+            
+        return True
+    except Exception as e:
+        print(f"檢查圖片失敗: {str(e)}")
+        return False
+
+def setup_rich_menu():
+    """創建並設置 Rich Menu"""
     
-    # 尺寸定義: 2500x1200 (頂部頁籤 200px, 功能區 1000px)
-    menu_object = RichMenu(
-        size=RichMenu.Size(width=2500, height=1200),
-        selected=True, 
-        name="通用功能選單 (分頁一)",
-        chat_bar_text="選單",
+    # 先刪除現有的 Rich Menu
+    delete_rich_menu()
+    
+    # 檢查 PNG 圖片是否存在
+    if not os.path.exists(PNG_IMAGE_PATH):
+        print(f"圖片不存在: {PNG_IMAGE_PATH}")
+        return None
+    
+    # 檢查圖片尺寸
+    if not check_image_size(PNG_IMAGE_PATH):
+        print("圖片不符合 LINE Rich Menu 要求，請修正後再試")
+        return None
+    
+    # 創建 Rich Menu 物件
+    rich_menu_to_create = RichMenu(
+        size={"width": 1242, "height": 847},
+        selected=True,
+        name="Main Menu",
+        chat_bar_text="點我開啟選單",
         areas=[
-            # A. 頁籤區域 (所有頁面都一樣)
-            
-            # A1: 通用功能頁籤 (當前頁籤)
             RichMenuArea(
-                bounds=RichMenuBounds(x=0, y=0, width=833, height=200),
-                action=PostbackAction(label='通用功能', data='action=switch_menu&target=general')
+                bounds=RichMenuBounds(x=0, y=424, width=414, height=424),
+                action=MessageAction(label="修改個人資訊", text="修改個人資訊")
             ),
-            # A2: 住戶功能頁籤
             RichMenuArea(
-                bounds=RichMenuBounds(x=834, y=0, width=833, height=200),
-                action=PostbackAction(label='住戶功能', data='action=switch_menu&target=resident')
+                bounds=RichMenuBounds(x=0, y=0, width=1050, height=424),
+                action=MessageAction(label="我要報修", text="我要報修")
             ),
-            # A3: 預售屋專區頁籤
             RichMenuArea(
-                bounds=RichMenuBounds(x=1667, y=0, width=833, height=200),
-                action=PostbackAction(label='預售屋專區', data='action=switch_menu&target=presell')
+                bounds=RichMenuBounds(x=1050, y=0, width=192, height=424),
+                action=MessageAction(label="確認交屋", text="確認交屋")  # 修改為"確認交屋"
             ),
-            
-            # B. 功能區 (y=201, height=500)
-            
-            # B1: 重設個人資訊
             RichMenuArea(
-                bounds=RichMenuBounds(x=0, y=201, width=833, height=500),
-                action=MessageAction(text='重設個人資訊')
+                bounds=RichMenuBounds(x=414, y=424, width=414, height=424),
+                action=MessageAction(label="我的個人資料", text="我的個人資料")
             ),
-            # B2: 我的資料
             RichMenuArea(
-                bounds=RichMenuBounds(x=834, y=201, width=833, height=500),
-                action=MessageAction(text='我的資料')
-            ),
-            # B3: 私訊客服
-            RichMenuArea(
-                bounds=RichMenuBounds(x=1667, y=201, width=833, height=500),
-                action=MessageAction(text='私訊客服')
+                bounds=RichMenuBounds(x=828, y=424, width=414, height=424),
+                action=MessageAction(label="私訊客服", text="私訊客服")
             )
         ]
     )
     
-    # 執行 API 呼叫，創建骨架並返回 ID
-    rich_menu_id = line_bot_api.create_rich_menu(rich_menu=menu_object)
-    global RICH_MENU_GENERAL_ID
-    RICH_MENU_GENERAL_ID = rich_menu_id
+    # 創建 Rich Menu
+    try:
+        rich_menu_id = line_bot_api.create_rich_menu(rich_menu=rich_menu_to_create)
+        print(f"成功創建 Rich Menu，ID: {rich_menu_id}")
+    except Exception as e:
+        print(f"創建 Rich Menu 失敗: {str(e)}")
+        return None
+    
+    # 上傳 Rich Menu 圖片
+    try:
+        with open(PNG_IMAGE_PATH, 'rb') as f:
+            line_bot_api.set_rich_menu_image(rich_menu_id, "image/png", f)
+            print(f"成功上傳 Rich Menu 圖片")
+    except Exception as e:
+        print(f"上傳 Rich Menu 圖片失敗：{str(e)}")
+        print(f"錯誤詳情：{e}")  # 顯示更多錯誤詳情
+        return None
+    
+    # 設置為預設 Rich Menu
+    try:
+        line_bot_api.set_default_rich_menu(rich_menu_id)
+        print("已成功設置為預設 Rich Menu")
+    except Exception as e:
+        print(f"設置預設 Rich Menu 失敗：{str(e)}")
+    
     return rich_menu_id
 
-def create_resident_rich_menu():
-    """創建【住戶功能選單】的 Rich Menu 骨架。"""
-    
-    menu_object = RichMenu(
-        size=RichMenu.Size(width=2500, height=1200),
-        selected=True, 
-        name="住戶功能選單 (分頁二)",
-        chat_bar_text="選單",
-        areas=[
-            # A. 頁籤區域 (保持一致，確保切換邏輯不變)
-            RichMenuArea(bounds=RichMenuBounds(x=0, y=0, width=833, height=200), action=PostbackAction(label='通用功能', data='action=switch_menu&target=general')),
-            RichMenuArea(bounds=RichMenuBounds(x=834, y=0, width=833, height=200), action=PostbackAction(label='住戶功能', data='action=switch_menu&target=resident')),
-            RichMenuArea(bounds=RichMenuBounds(x=1667, y=0, width=833, height=200), action=PostbackAction(label='預售屋專區', data='action=switch_menu&target=presell')),
-            
-            # B. 功能區 (單一按鈕：我要報修)
-            
-            # B1: 我要報修 (佔滿整個功能區)
-            RichMenuArea(
-                bounds=RichMenuBounds(x=0, y=201, width=2500, height=500),
-                action=MessageAction(text='我要報修')
-            )
-        ]
-    )
-    
-    # 🚨 執行 API 呼叫，創建骨架並返回 ID
-    rich_menu_id = line_bot_api.create_rich_menu(rich_menu=menu_object)
-    global RICH_MENU_RESIDENT_ID
-    RICH_MENU_RESIDENT_ID = rich_menu_id
-    return rich_menu_id
-
-def create_presell_rich_menu():
-    """創建【預售屋專區選單】的 Rich Menu 骨架。"""
-    
-    menu_object = RichMenu(
-        size=RichMenu.Size(width=2500, height=1200),
-        selected=True, 
-        name="預售屋專區選單 (分頁三)",
-        chat_bar_text="選單",
-        areas=[
-            # A. 頁籤區域 (保持一致)
-            RichMenuArea(bounds=RichMenuBounds(x=0, y=0, width=833, height=200), action=PostbackAction(label='通用功能', data='action=switch_menu&target=general')),
-            RichMenuArea(bounds=RichMenuBounds(x=834, y=0, width=833, height=200), action=PostbackAction(label='住戶功能', data='action=switch_menu&target=resident')),
-            RichMenuArea(bounds=RichMenuBounds(x=1667, y=0, width=833, height=200), action=PostbackAction(label='預售屋專區', data='action=switch_menu&target=presell')),
-            
-            # B. 功能區 (兩個按鈕)
-            
-            # B1: 預約客變時間 (左半邊)
-            RichMenuArea(
-                bounds=RichMenuBounds(x=0, y=201, width=1250, height=500),
-                action=MessageAction(text='預約客變時間')
-            ),
-            # B2: 各階段款項上傳 (右半邊)
-            RichMenuArea(
-                bounds=RichMenuBounds(x=1251, y=201, width=1249, height=500), # 寬度可以稍微調整以湊滿 2500
-                action=MessageAction(text='各階段款項上傳')
-            )
-        ]
-    )
-    
-    # 🚨 執行 API 呼叫，創建骨架並返回 ID
-    rich_menu_id = line_bot_api.create_rich_menu(rich_menu=menu_object)
-    global RICH_MENU_PRESELL_ID
-    RICH_MENU_PRESELL_ID = rich_menu_id
-    return rich_menu_id
-
-"""
-rich_menu_to_create = RichMenu(
-    size={"width": 2500, "height": 843},
-    selected=True,
-    name="Main Menu",
-    chat_bar_text="點我開啟選單",
-    areas=[
-        RichMenuArea(
-            bounds=RichMenuBounds(x=0, y=0, width=1250, height=843),
-            action=MessageAction(label="修改個人資訊", text="修改個人資訊")
-        ),
-        RichMenuArea(
-            bounds=RichMenuBounds(x=1250, y=0, width=1250, height=843),
-            action=MessageAction(label="我要報修", text="我要報修")
-        )
-    ]
-)
-
-
-rich_menu_id = line_bot_api.create_rich_menu(rich_menu=rich_menu_to_create)
-with open("richmenu.jpg", 'rb') as f:
-    line_bot_api.set_rich_menu_image(rich_menu_id, "image/png", f)
-
-line_bot_api.set_default_rich_menu(rich_menu_id)
-"""
+# 如果直接執行此文件，則設置 Rich Menu
+if __name__ == "__main__":
+    setup_rich_menu()

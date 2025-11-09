@@ -53,7 +53,7 @@ def get_user(line_user_id):
             cursor.execute(sql, (line_user_id,))
             user = cursor.fetchone()
             if user:
-                # 將地址字串分割成清單
+                # 將戶別字串分割成清單
                 if user['address']:
                     user['addresses'] = user['address'].split('/')
                 else:
@@ -102,13 +102,13 @@ def append_address(line_user_id, new_address):
     conn = get_connection()
     with conn:
         with conn.cursor() as cursor:
-            # 取得現有的地址字串
+            # 取得現有的戶別字串
             sql = "SELECT address FROM users WHERE line_user_id = %s"
             cursor.execute(sql, (line_user_id,))
             result = cursor.fetchone()
             current_address = result['address'] if result and result['address'] else ""
 
-            # 合併地址
+            # 合併戶別
             if current_address:
                 updated_address = f"{current_address}/{new_address}"
             else:
@@ -148,10 +148,11 @@ def get_address_info(address):
             return item
     return None
 
-# 檢查地址是不是成屋
+# 檢查戶別是不是成屋
 def is_ready_property(address):
-    info = get_address_info(address)
-    return info.get('property_type') == '成屋'
+    """檢查戶別是否已完成交屋(已設定保固起算日)"""
+    address_info = get_address_info(address)
+    return address_info and address_info.get('warranty_start_date') is not None
 
 def load_addresses_data():
     try:
@@ -162,8 +163,8 @@ def load_addresses_data():
 
 def update_address_warranty_start_date(address, start_date):
     """
-    更新指定地址的保固開始日期。
-    只有當該地址的 warranty_start_date 欄位為空時，才會寫入新日期。
+    更新指定戶別的保固開始日期。
+    只有當該戶別的 warranty_start_date 欄位為空時，才會寫入新日期。
     """
     addresses_data = load_addresses_data()
     updated = False
