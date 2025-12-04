@@ -1038,6 +1038,75 @@ def handle_message(event):
                     TextSendMessage(text="地址清單檔案不存在，請聯繫管理員。")
                 )
             return
+        # 在 handle_message 函數中添加新的處理分支
+        elif msg == '管理員':
+            # 設置下一步驟為管理員密碼驗證
+            update_user_step(user_id, 'admin_password_auth')
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="請輸入管理員密碼：")
+            )
+            return
+
+        # 處理管理員密碼驗證
+        elif step == 'admin_password_auth':
+            admin_password = os.getenv("ADMIN_PASSWORD", "yisin1234")  # 預設密碼，應該從環境變量獲取
+            
+            if msg == admin_password:
+                # 密碼正確，獲取所有戶別資訊
+                try:
+                    with open('available_addresses.json', 'r', encoding='utf-8') as f:
+                        available_addresses = json.load(f)
+                    
+                    # 格式化所有戶別及密碼
+                    addresses_info = []
+                    for item in available_addresses:
+                        address = item.get("address", "")
+                        password = item.get("password", "")
+                        if address and password:
+                            addresses_info.append(f"【{address}】密碼: {password}")
+                    
+                    if addresses_info:
+                        # 分批發送，避免訊息太長
+                        batch_size = 10
+                        for i in range(0, len(addresses_info), batch_size):
+                            batch = addresses_info[i:i+batch_size]
+                            reply_text = "\n".join(batch)
+                            
+                            # 只對第一批使用 reply_token，後續批次使用 push_message
+                            if i == 0:
+                                line_bot_api.reply_message(
+                                    event.reply_token,
+                                    TextSendMessage(text=f"所有戶別密碼：\n{reply_text}")
+                                )
+                            else:
+                                line_bot_api.push_message(
+                                    user_id,
+                                    TextSendMessage(text=reply_text)
+                                )
+                    else:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(text="沒有找到任何戶別資訊。")
+                        )
+                except FileNotFoundError:
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(text="戶別清單檔案不存在，請聯繫系統管理員。")
+                    )
+                
+                # 清除步驟狀態
+                update_user_step(user_id, None)
+            else:
+                # 密碼錯誤
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="管理員密碼錯誤，請聯繫系統管理員。")
+                )
+                # 清除步驟狀態
+                update_user_step(user_id, None)
+            return
+        
 
 
     # 雖然不期望他們選擇訪客，但還是做一下
