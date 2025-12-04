@@ -91,9 +91,6 @@ def handle_follow(event):
     if not user_exists(user_id):
         add_user(user_id)
     
-    # 建立身分選擇的圖片
-    imagemap_msg = create_identity_imagemap()
-    
     # 添加 Quick Reply
     quick_reply = create_identity_quick_reply()
     text_message = TextSendMessage(
@@ -101,8 +98,8 @@ def handle_follow(event):
         quick_reply=quick_reply
     )
     
-    # 注意順序改變：先圖片，後文字（帶有Quick Reply）
-    line_bot_api.reply_message(event.reply_token, [imagemap_msg, text_message])
+    # 移除 imagemap，只發送帶有 Quick Reply 的文字訊息
+    line_bot_api.reply_message(event.reply_token, text_message)
 
 # ----------------------------------------------------
 # 處理 Rich Menu 頁籤切換邏輯
@@ -152,8 +149,7 @@ def handle_message(event):
             text="請選擇您的身份：",
             quick_reply=quick_reply
         )
-        imagemap_msg = create_identity_imagemap()
-        line_bot_api.reply_message(event.reply_token, [text_message, imagemap_msg])  # 修改這裡，把 text_message 也包含在內
+        line_bot_api.reply_message(event.reply_token, [text_message]) 
         return
 
     # 其他訊息處理（身份選擇後）
@@ -165,26 +161,13 @@ def handle_message(event):
 
             update_identity(user_id, msg[-2:])
 
-            if msg == '我是住戶':
-
-                # step 紀錄目前詢問的個人資訊；mode 紀錄是否是第一次填寫，若否代表是在更改個人訊息，不使用預設的填寫流程。
-                # 流程為 身分證字號 -> 名字 -> 生日 -> 手機 -> email -> 戶名
-                update_user_step(user_id, 'ask_id_number')
-                update_user_mode(user_id, 'initial_fill')
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text=f"你選擇的身分是：{msg[-2:]}\n請輸入您的身分字號：")
-                )
-            else:
-                # step 紀錄目前詢問的個人資訊；mode 紀錄是否是第一次填寫，若否代表是在更改個人訊息，不使用預設的填寫流程。
-                # 訪客跳過身分證與戶名詢問
-                # 流程為 名字 -> 生日 -> 手機 -> email
-                update_user_step(user_id, 'ask_name')
-                update_user_mode(user_id, 'initial_fill')
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text=f"你選擇的身分是：{msg[-2:]}\n請輸入您的名字：")
-                )
+            # 無論住戶或訪客，都直接進入 ask_name 步驟
+            update_user_step(user_id, 'ask_name')
+            update_user_mode(user_id, 'initial_fill')
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=f"你選擇的身分是：{msg[-2:]}\n請輸入您的名字：")
+            )
         else:
             # 添加 Quick Reply
             quick_reply = create_identity_quick_reply()
@@ -342,7 +325,6 @@ def handle_message(event):
                 profile_text = (
                     f"✅ 你的個人資料：\n"
                     f"身分：{user_info.get('identity', '未設定')}\n"
-                    f"身分證字號：{user_info.get('id_number', '未設定')}\n"
                     f"名字：{user_info.get('name', '未設定')}\n"
                     f"生日：{user_info.get('birthday', '未設定')}\n"
                     f"電話：{user_info.get('phone', '未設定')}\n"
@@ -365,14 +347,6 @@ def handle_message(event):
                 alt_text="修改個人資訊",
                 template=CarouselTemplate(
                     columns=[
-                        CarouselColumn(
-                            thumbnail_image_url = IMAGE_ID,
-                            title="身份證字號",
-                            text="修改身份證字號",
-                            actions=[
-                                MessageAction(label="確認", text="修改_身分證字號")
-                            ]
-                        ),
                         CarouselColumn(
                             thumbnail_image_url = IMAGE_NAME,
                             title="名字",
@@ -541,7 +515,6 @@ def handle_message(event):
 
             update_user_mode(user_id, 'modify_data')
             field_map = {
-                "修改_身分證字號": ("ask_id_number", "請輸入新的身分證字號："),
                 "修改_名字": ("ask_name", "請輸入新的名字："),
                 "修改_生日": ("ask_birthday", "請輸入新的生日（yyyy-mm-dd）："),
                 "修改_電話": ("ask_phone", "請輸入新的電話號碼："),
@@ -838,10 +811,9 @@ def handle_message(event):
                 return
 
         elif msg == '重填':
-            if step in ['ask_id_number', 'ask_name', 'ask_birthday', 'ask_phone', 'ask_email']:
+            if step in ['ask_name', 'ask_birthday', 'ask_phone', 'ask_email']:
                 clear_temp_value(user_id)
                 question = {
-                    'ask_id_number': "請重新輸入你的身分證字號：",
                     'ask_name': "請重新輸入你的名字：",
                     'ask_birthday': "請重新輸入你的生日（格式 yyyy-mm-dd）：",
                     'ask_phone': "請重新輸入你的電話號碼：",
