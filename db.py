@@ -29,8 +29,14 @@ def add_user(line_user_id):
     conn = get_connection()
     with conn:
         with conn.cursor() as cursor:
-            sql = "INSERT INTO users (line_user_id) VALUES (%s)"
-            cursor.execute(sql, (line_user_id,))
+            # 先查詢最大的 id 值
+            cursor.execute("SELECT MAX(id) as max_id FROM users")
+            result = cursor.fetchone()
+            next_id = 1 if result['max_id'] is None else result['max_id'] + 1
+            
+            # 插入新用戶時指定 id
+            sql = "INSERT INTO users (id, line_user_id) VALUES (%s, %s)"
+            cursor.execute(sql, (next_id, line_user_id))
             conn.commit()
 
 def update_identity(line_user_id, identity):

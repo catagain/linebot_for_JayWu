@@ -1,257 +1,130 @@
 [
   {
-    "address": "士林西路_1A",
-    "password": "0Jw3",
-    "warranty_start_date": "2025-11-08"
-  },
-  {
-    "address": "士林西路_2A",
-    "password": "7777"
-  },
-  {
-    "address": "士林西路_3A",
-    "password": "7777"
-  },
-  {
-    "address": "士林西路_4A",
-    "password": "7777"
-  },
-  {
-    "address": "士林西路_5A",
-    "password": "7777"
-  },
-  {
-    "address": "士林西路_6A",
-    "password": "7777"
-  },
-  {
-    "address": "士林西路_7A",
-    "password": "7777"
-  },
-  {
     "address": "鷁欣緻境_2A",
-    "password": "5CM0",
-    "warranty_start_date": "2025-11-30"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_2B",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_2C",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_2D",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_3A",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_3B",
-    "password": "EA80"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_3C",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_3D",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_4A",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_4B",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_4C",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_4D",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_5A",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_5B",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_5C",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_5D",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_6A",
-    "password": "1234"
+    "password": "7w9l"
   },
   {
     "address": "鷁欣緻境_6B",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_6C",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_6D",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_7A",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_7B",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_7C",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_7D",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_8A",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_8B",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_8C",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_8D",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_9A",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_9B",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_9C",
-    "password": "1234"
+    "password": "0000"
   },
   {
     "address": "鷁欣緻境_9D",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_2A",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_2B",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_2C",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_3A",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_3B",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_3C",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_4A",
-    "password": "55PR",
-    "warranty_start_date": "2025-11-30"
-  },
-  {
-    "address": "鷁崎緻鄰_4B",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_4C",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_5A",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_5B",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_5C",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_6A",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_6B",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_6C",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_7A",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_7B",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_7C",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_8A",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_8B",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_8C",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_9A",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_9B",
-    "password": "1234"
-  },
-  {
-    "address": "鷁崎緻鄰_9C",
-    "password": "1234"
+    "password": "0000"
   }
 ]
