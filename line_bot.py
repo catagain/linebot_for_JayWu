@@ -17,6 +17,7 @@ from db import *
 from imagemap import create_identity_imagemap
 
 load_dotenv()
+sync_json_to_db()
 
 app = Flask(__name__)
 
@@ -384,7 +385,7 @@ def handle_message(event):
                             title="建案",
                             text="新增建案",
                             actions=[
-                                MessageAction(label="確認", text="修改_戶名或門牌"),
+                                MessageAction(label="確認", text="修改_建案及戶別"),
                             ]
                         )
                     ]
@@ -495,7 +496,7 @@ def handle_message(event):
         elif msg.startswith("修改_"):
 
             # 戶名門牌用選擇的，故另外處理
-            if msg == '修改_戶名或門牌':
+            if msg == '修改_建案及戶別':
                 update_user_mode(user_id, 'modify_data')
                 update_user_step(user_id, 'ask_address_1')
                 
@@ -1116,6 +1117,17 @@ def handle_message(event):
             return
 
 if __name__ == "__main__":
+    try:
+        print("正在同步戶別資料到資料庫...")
+        from db import sync_json_to_db, load_addresses_data
+        addresses_data = load_addresses_data()
+        print(f"JSON檔案中有 {len(addresses_data)} 筆戶別資料")
+        if sync_json_to_db():
+            print("資料已成功同步到資料庫")
+        else:
+            print("資料同步失敗，請檢查日誌")
+    except Exception as e:
+        print(f"同步過程出錯: {e}")
     app.run()
 
 

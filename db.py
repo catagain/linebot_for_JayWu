@@ -4,18 +4,28 @@ from dotenv import load_dotenv
 import json
 import random
 import string
+import logging
+
+# 設置基本日誌配置
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 load_dotenv()
 
 def get_connection():
-    return pymysql.connect(
-        host=os.getenv("DB_HOST"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-        db=os.getenv("DB_NAME"),
-        charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor
-    )
+    try:
+        conn = pymysql.connect(
+            host=os.getenv("DB_HOST"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            db=os.getenv("DB_NAME"),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        logging.info("資料庫連線成功")
+        return conn
+    except pymysql.MySQLError as e:
+        logging.error(f"資料庫連線失敗: {e}")
+        raise Exception(f"資料庫連線失敗: {e}")
 
 def user_exists(line_user_id):
     conn = get_connection()
@@ -38,14 +48,13 @@ def add_user(line_user_id):
             sql = "INSERT INTO users (id, line_user_id) VALUES (%s, %s)"
             cursor.execute(sql, (next_id, line_user_id))
             conn.commit()
-
 def update_identity(line_user_id, identity):
     conn = get_connection()
     with conn:
         with conn.cursor() as cursor:
             sql = """
             UPDATE users
-            SET identity = %s, is_identified = TRUE
+            SET identity = %s
             WHERE line_user_id = %s
             """
             cursor.execute(sql, (identity, line_user_id))
@@ -59,9 +68,10 @@ def get_user(line_user_id):
             cursor.execute(sql, (line_user_id,))
             user = cursor.fetchone()
             if user:
-                # 將戶別字串分割成清單
-                if user['address']:
-                    user['addresses'] = user['address'].split('/')
+                # 將戶別字串分割成清單，使用 .get() 方法避免 KeyError
+                address = user.get('address')
+                if address:
+                    user['addresses'] = address.split('/')
                 else:
                     user['addresses'] = []
             return user
@@ -125,6 +135,75 @@ def append_address(line_user_id, new_address):
             cursor.execute(sql, (updated_address, line_user_id))
             conn.commit()
 
+def add_column_if_not_exists(column_name, column_type):
+    """檢查並添加指定的欄位到 users 表"""
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cursor:
+            try:
+                # 檢查欄位是否已存在
+                sql = """
+                SELECT COUNT(*) as count
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'users' AND COLUMN_NAME = %s
+                """
+                cursor.execute(sql, (os.getenv("DB_NAME"), column_name))
+                result = cursor.fetchone()
+                if result and result['count'] == 0:
+                    # 欄位不存在，添加欄位
+                    sql = f"""
+                    ALTER TABLE users
+                    ADD COLUMN {column_name} {column_type}
+                    """
+                    cursor.execute(sql)
+                    conn.commit()
+                    logging.info(f"已成功添加 {column_name} 欄位")
+                    return True
+                else:
+                    logging.info(f"{column_name} 欄位已存在")
+                    return False
+            except pymysql.MySQLError as e:
+                logging.error(f"添加 {column_name} 欄位失敗: {e}")
+                return False
+
+def ensure_all_required_columns():
+    """確保所有必要的欄位都存在於數據庫中"""
+    # 定義所有需要的欄位及其類型
+    required_columns = {
+        'identity': 'VARCHAR(50)',
+        'step': 'VARCHAR(100)',
+        'mode': 'VARCHAR(100)',
+        'temp_value': 'TEXT',
+        'address': 'TEXT',
+        'name': 'VARCHAR(100)',
+        'birthday': 'VARCHAR(20)',
+        'phone': 'VARCHAR(20)',
+        'email': 'VARCHAR(100)',
+        'id_number': 'VARCHAR(20)',
+        'is_identified': 'BOOLEAN DEFAULT FALSE'
+    }
+    
+    # 檢查並添加每一個欄位
+    added_columns = []
+    for column_name, column_type in required_columns.items():
+        if add_column_if_not_exists(column_name, column_type):
+            added_columns.append(column_name)
+    
+    # 如果添加了 is_identified 欄位，將所有已有身分的用戶設為已識別
+    if 'is_identified' in added_columns:
+        conn = get_connection()
+        with conn:
+            with conn.cursor() as cursor:
+                sql = """
+                UPDATE users
+                SET is_identified = TRUE
+                WHERE identity IS NOT NULL
+                """
+                cursor.execute(sql)
+                conn.commit()
+                logging.info("已將所有已有身分的用戶設為已識別")
+    
+    return added_columns
 
 # ============= addresses JSON 資料格式修改 =======================
 
@@ -142,10 +221,12 @@ def update_address_info(address, new_password):
             item['password'] = new_password
             break
     save_addresses_data(addresses_data)
+    sync_json_to_db()  # 同步到資料庫
 
 def save_addresses_data(data):
     with open('available_addresses.json', 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    sync_json_to_db()  # 同步到資料庫
 
 def get_address_info(address):
     addresses_data = load_addresses_data()
@@ -186,5 +267,111 @@ def update_address_warranty_start_date(address, start_date):
             
     if updated:
         save_addresses_data(addresses_data)
+        sync_json_to_db()  # 同步到資料庫
         return True # 表示已更新
     return False # 表示未更新（因為日期已存在）
+# 在每次修改JSON後同步到資料庫
+
+def sync_json_to_db():
+    """同步JSON到資料庫"""
+    try:
+        # 讀取JSON
+        addresses_data = load_addresses_data()
+        logging.info(f"從JSON讀取到 {len(addresses_data)} 筆資料")
+        
+        conn = get_connection()
+        with conn:
+            with conn.cursor() as cursor:
+                # 確保表存在
+                cursor.execute("""
+                CREATE TABLE IF NOT EXISTS addresses (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    line_user_id VARCHAR(100),
+                    full_address VARCHAR(100) NOT NULL UNIQUE,
+                    password VARCHAR(20) NOT NULL,
+                    warranty_start_date DATE,
+                    create_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """)
+                
+                # 同步每條記錄
+                success_count = 0
+                for item in addresses_data:
+                    address = item.get('address')
+                    password = item.get('password')
+                    warranty_date = item.get('warranty_start_date')
+                    
+                    if address and password:
+                        try:
+                            sql = """
+                            INSERT INTO addresses (full_address, password, warranty_start_date)
+                            VALUES (%s, %s, %s)
+                            ON DUPLICATE KEY UPDATE 
+                            password = VALUES(password),
+                            warranty_start_date = COALESCE(VALUES(warranty_start_date), warranty_start_date)
+                            """
+                            cursor.execute(sql, (address, password, warranty_date))
+                            success_count += 1
+                        except Exception as e:
+                            logging.error(f"同步戶別 {address} 失敗: {e}")
+                
+                conn.commit()
+                logging.info(f"成功同步 {success_count}/{len(addresses_data)} 筆戶別資料")
+                
+        return True
+    except Exception as e:
+        logging.error(f"同步JSON到資料庫失敗: {e}")
+        logging.exception("詳細錯誤")
+        return False
+    
+def check_addresses_table():
+    conn = get_connection()
+    with conn:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+            SELECT COUNT(*) as count 
+            FROM information_schema.TABLES 
+            WHERE TABLE_SCHEMA = %s 
+            AND TABLE_NAME = 'addresses'
+            """, (os.getenv("DB_NAME"),))
+            result = cursor.fetchone()
+            exists = result and result['count'] > 0
+            if exists:
+                # 查看表中有多少記錄
+                cursor.execute("SELECT COUNT(*) as count FROM addresses")
+                count = cursor.fetchone()['count']
+                print(f"addresses表存在，共有{count}筆記錄")
+            else:
+                print("addresses表不存在")
+            return exists
+def force_sync_json_to_db():
+    print("開始強制同步JSON到資料庫...")
+    result = sync_json_to_db()
+    if result:
+        # 查詢記錄數
+        conn = get_connection()
+        with conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) as count FROM addresses")
+                count = cursor.fetchone()['count']
+                print(f"同步成功，addresses表有{count}筆記錄")
+    else:
+        print("同步失敗")
+    return result
+
+if __name__ == "__main__":
+    try:
+        print("正在測試資料庫連線...")
+        connection = get_connection()
+        print("資料庫連線測試成功")
+        connection.close()
+        
+        # 確保所有必要的欄位都存在
+        added_columns = ensure_all_required_columns()
+        if added_columns:
+            print(f"已添加以下欄位到數據庫: {', '.join(added_columns)}")
+        else:
+            print("所有必要的欄位已存在")
+        
+    except Exception as e:
+        print(f"資料庫連線測試失敗: {e}")

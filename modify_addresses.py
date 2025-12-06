@@ -19,6 +19,41 @@ def save_addresses(addresses):
         json.dump(addresses, f, ensure_ascii=False, indent=2)
     print(f"成功保存 {len(addresses)} 筆地址資料")
 
+def load_case_names():
+    """載入現有的案名數據"""
+    try:
+        with open('addresses.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+    except json.JSONDecodeError:
+        print("警告: addresses.json 文件格式錯誤，將創建新文件")
+        return []
+
+def save_case_names(case_names):
+    """保存案名數據到文件"""
+    with open('addresses.json', 'w', encoding='utf-8') as f:
+        json.dump(case_names, f, ensure_ascii=False, indent=2)
+    print(f"成功保存 {len(case_names)} 筆案名資料到 addresses.json")
+
+def update_case_name(case_name):
+    """更新案名列表，如果案名不存在則添加"""
+    case_names = load_case_names()
+    if case_name not in case_names:
+        case_names.append(case_name)
+        save_case_names(case_names)
+        print(f"案名「{case_name}」已添加到 addresses.json")
+    else:
+        print(f"案名「{case_name}」已存在於 addresses.json")
+    
+    # 同步到資料庫（如果已實現）
+    try:
+        from db import sync_json_to_db, check_addresses_table
+        sync_json_to_db()
+        check_addresses_table()
+    except ImportError:
+        print("提示: db 模組不可用，無法同步到資料庫")
+
 def generate_building_addresses(case_name, floor_range, units, password):
     """生成大樓類型的地址"""
     addresses = []
@@ -111,7 +146,11 @@ def main():
         # 合併並保存地址
         all_addresses = existing_addresses + new_addresses
         save_addresses(all_addresses)
-        print("地址新增成功!")
+        
+        # 更新案名列表
+        update_case_name(case_name)
+        
+        print("地址及案名新增成功!")
     else:
         print("取消新增操作")
 
