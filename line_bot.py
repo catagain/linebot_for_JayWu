@@ -1128,7 +1128,7 @@ if __name__ == "__main__":
             print("資料同步失敗，請檢查日誌")
     except Exception as e:
         print(f"同步過程出錯: {e}")
-    app.run()
+    app.run(host='0.0.0.0', port=8000)
 
 
 
